@@ -521,7 +521,7 @@ async function showInfo(label) {
     // photos for one of the 7 boxes go into that box; any other photo column stays in the info card
     const mine = PHOTOS.find((n) => norm(names[n] || n) === norm(g.name));
     const blk = document.createElement('div'); blk.className = 'irow';
-    const k = document.createElement('div'); k.className = 'ik'; k.textContent = (mine ? 'Already in Airtable' : g.name) + ' (' + g.atts.length + ')';
+    const k = document.createElement('div'); k.className = 'ik'; k.textContent = g.name + ' (' + g.atts.length + ')'; if (mine) k.hidden = true;
     const th = document.createElement('div'); th.className = 'ith';
     blk.append(k, th);
     if (mine) { const ex = $('ex_' + fid(mine)); ex.textContent = ''; ex.hidden = false; ex.append(blk); blk.style.borderTop = '0'; } else inf.append(blk);
@@ -593,7 +593,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-21-j';
+const APP_VERSION = '2026-10-21-l';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1262,7 +1262,7 @@ async function renderHome() {
     const d = document.createElement('details'); d.className = 'grp';
     d.open = searching || openSet.has(g.key);
     const sm = document.createElement('summary');
-    const l = document.createElement('span'); if (g.warn) { const w = document.createElement('span'); w.className = 'rdot'; l.append(w); } if (g.op) { if (!g.noop) l.append('Operational Test '); l.append(chipEl(g.op)); } else l.append(g.label);
+    const l = document.createElement('span'); if (g.warn) { const w = document.createElement('span'); w.className = 'rdot'; l.append(w); } if (g.op) { l.append(chipEl(g.op)); } else l.append(g.label);
     const c = document.createElement('span'); c.className = 'cnt'; c.textContent = g.items.length;
     sm.append(l, c); d.append(sm);
     g.items.forEach((n) => d.append(row(n)));
