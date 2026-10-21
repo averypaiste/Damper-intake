@@ -1,0 +1,1739 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f4e79">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Damper Inspection</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --ink:#1b1f24; --muted:#667085; --brand:#1f4e79; --ok:#1a7f4b; --warn:#b54708; --err:#b42318; --line:#d9dde3; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12151a; --card:#1b2028; --ink:#e8ecf1; --muted:#98a2b3; --brand:#5b9bd5; --line:#2e3642; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); padding-bottom:env(safe-area-inset-bottom); }
+  header { position:sticky; top:0; z-index:5; background:var(--brand); color:#fff; padding:12px 16px; display:flex; align-items:center; gap:10px; }
+  header h1 { font-size:18px; margin:0; flex:1; }
+  header h1 { font-size:15px; line-height:1.15; flex:0 1 auto; min-width:0; margin:0; }
+  header h1 .short { display:none; }
+  @media (max-width:520px) { header h1 .long { display:none; } header h1 .short { display:inline; } }
+  header button { white-space:nowrap; padding:6px 10px; }
+  header { gap:6px; padding:10px 12px; background:#1a7f4b; transition:background .2s; }
+  header.off { background:#b42318; }
+  header button { font-size:13px; padding:6px 8px; }
+  #ttl { flex:1 1 auto; min-width:0; }
+  header h1 { white-space:nowrap; }
+  #net { display:block; font-size:12px; font-weight:600; opacity:.95; margin-top:1px; }
+  main { max-width:640px; margin:0 auto; padding:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  label { display:block; font-weight:600; margin:12px 0 4px; }
+  label:first-child { margin-top:0; }
+  input, select, textarea { width:100%; font:inherit; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); }
+  textarea { min-height:90px; }
+  button { font:inherit; font-weight:600; padding:12px 16px; border:0; border-radius:10px; background:var(--brand); color:#fff; cursor:pointer; }
+  button.secondary { background:transparent; color:var(--brand); border:1px solid var(--brand); }
+  button.small { padding:6px 10px; font-size:14px; }
+  button:disabled { opacity:.5; }
+  .row { display:flex; gap:10px; }
+  .row > * { flex:1; }
+  .two { display:flex; gap:10px; } .two > div { flex:1; }
+  h2 { font-size:16px; margin:0 0 8px; }
+  .hint { font-size:13px; color:var(--muted); margin:4px 0 0; }
+  .sect { font-size:14px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:20px 0 4px; }
+  .pblock { border:1px dashed var(--line); border-radius:10px; padding:10px; margin-top:10px; }
+  .pblock .ph { display:flex; align-items:center; gap:8px; }
+  .pblock .ph b { flex:1; }
+  .pblock input[type=file] { display:none; }
+  .pblock .pbtns { display:flex; gap:8px; margin-top:8px; }
+  .pblock .pbtns .addbtn { flex:1; text-align:center; }
+  .pblock .addbtn { padding:6px 12px; font-size:14px; border-radius:8px; background:transparent; color:var(--brand); border:1px solid var(--brand); cursor:pointer; font-weight:600; }
+  .thumbs { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .thumb { position:relative; width:72px; height:72px; border-radius:8px; overflow:hidden; border:1px solid var(--line); }
+  .thumb img { width:100%; height:100%; object-fit:cover; }
+  .thumb button { position:absolute; top:2px; right:2px; padding:0 6px; font-size:14px; line-height:20px; background:rgba(0,0,0,.65); border-radius:99px; }
+  .item { display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--line); }
+  .item:first-of-type { border-top:0; }
+  .item .t { flex:1; min-width:0; }
+  .item .t b { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .item .t span { font-size:13px; color:var(--muted); }
+  .badge { font-size:12px; padding:2px 8px; border-radius:99px; border:1px solid currentColor; }
+  .pending { color:var(--warn); } .synced { color:var(--ok); } .error { color:var(--err); }
+  dialog { border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--ink); max-width:480px; width:92%; }
+  dialog::backdrop { background:rgba(0,0,0,.5); }
+  #picker[open] { display:flex; flex-direction:column; height:85vh; height:85dvh; max-height:85vh; max-height:85dvh; padding:14px; overflow:hidden; }
+  #picker h2 { margin:0 0 8px; }
+  #pkList { flex:1 1 auto; min-height:0; overflow-y:auto; margin:8px 0; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; touch-action:pan-y; }
+  #pkFilters, #pkSearch, #pkClose { flex:0 0 auto; }
+  .pkitem { display:block; width:100%; text-align:left; background:transparent; color:var(--ink); border:0; border-bottom:1px solid var(--line); border-radius:0; padding:14px 6px; font-weight:500; }
+  .pkitem:active { background:var(--bg); }
+  [hidden] { display:none !important; }
+  #sTablesOut { margin:8px 0 0; max-height:220px; overflow:auto; border:1px solid var(--line); border-radius:10px; padding:8px; }
+  .tcard { padding:6px 0; border-bottom:1px solid var(--line); }
+  .tcard:last-child { border-bottom:0; }
+  .tname { background:transparent; color:var(--ink); border:0; padding:6px 4px; font-weight:700; text-align:left; width:100%; }
+  .tname.on, .chip.on { color:var(--brand); }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; padding:0 4px 4px; }
+  .chip { background:transparent; color:var(--muted); border:1px solid var(--line); border-radius:99px; padding:4px 10px; font-size:13px; font-weight:500; }
+  .chip.on { border-color:var(--brand); }
+  #info { border:1px solid var(--line); border-radius:10px; padding:4px 12px 8px; margin-top:8px; background:var(--bg); }
+  #info summary { cursor:pointer; font-weight:700; padding:8px 0; }
+  .irow { padding:6px 0; border-top:1px solid var(--line); }
+  .ik { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
+  .iv { white-space:pre-wrap; word-break:break-word; }
+  .ith { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+  .ith img { width:64px; height:64px; object-fit:cover; border-radius:6px; border:1px solid var(--line); }
+  #detail[open] { display:flex; flex-direction:column; height:94vh; height:94dvh; max-height:94dvh; padding:0; overflow:hidden; }
+  #detailHead { flex:0 0 auto; display:flex; align-items:center; gap:12px; padding:10px 14px; border-bottom:1px solid var(--line); }
+  #detailHead b { flex:1; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #btnBack { width:40px; height:40px; padding:0; border-radius:50%; background:transparent; color:var(--ink); border:1px solid var(--line); font-size:26px; line-height:1; }
+  #detailBody { flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:14px; }
+  #dlist { margin-top:4px; }
+  /* Airtable-like look */
+  #detailHead { background:var(--card); }
+  #detailHead b { text-align:left; font-size:17px; }
+  #btnBack { border:0; width:36px; height:36px; font-size:28px; }
+  #detailBody label { font-size:13px; font-weight:500; color:var(--muted); margin:18px 0 6px; }
+  #detailBody input, #detailBody select, #detailBody textarea { background:var(--card); border-radius:6px; padding:11px 12px; }
+  #detailBody textarea { min-height:110px; }
+  .pblock { border:0; padding:0; margin-top:18px; }
+  .pblock .ph b { font-size:13px; font-weight:500; color:var(--muted); }
+  .pblock .pbtns { justify-content:center; }
+  .pblock .pbtns .addbtn { flex:0 1 auto; border-radius:99px; background:var(--bg); border-color:var(--line); color:var(--ink); padding:9px 18px; }
+  .thumb { width:84px; height:84px; }
+  .sect { text-transform:none; letter-spacing:0; font-size:13px; font-weight:500; }
+  .chip { display:inline-block; padding:2px 10px; border-radius:99px; font-size:13px; font-weight:600; color:#1b1f24; background:#e4e7ec; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; vertical-align:middle; }
+  .chipline { margin-top:6px; }
+  #navBar { flex:0 0 auto; display:flex; align-items:center; justify-content:center; gap:28px; padding:8px 14px calc(8px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--card); }
+  #navBar button { background:transparent; color:var(--ink); padding:6px 16px; font-size:22px; line-height:1; }
+  #navBar button:disabled { opacity:.25; }
+  #navPos { font-weight:600; min-width:60px; text-align:center; }
+  .grp summary .chip { margin-left:6px; }
+  .hq { margin-top:12px; display:flex; align-items:center; }
+  #helpBody p { margin:4px 0 0; color:var(--muted); line-height:1.4; }
+  details.grp { border-top:1px solid var(--line); }
+  details.grp > summary { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:14px 6px; font-weight:700; cursor:pointer; list-style:none; }
+  details.grp > summary::-webkit-details-marker { display:none; }
+  details.grp > summary::before { content:'▸'; margin-right:8px; color:var(--muted); }
+  details.grp[open] > summary::before { content:'▾'; }
+  details.grp > summary > span:first-child { flex:1; }
+  .cnt { background:var(--bg); border:1px solid var(--line); border-radius:99px; padding:2px 10px; font-size:13px; font-weight:600; color:var(--muted); }
+  #missBox { border:1px solid #d92d20; background:rgba(217,45,32,.10); border-radius:10px; padding:10px 12px; margin:0 0 12px; }
+  #missBox.none { border-color:var(--line); background:transparent; }
+  #missBox .mk { font-size:12px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); margin-bottom:2px; }
+  #missText { white-space:pre-wrap; word-break:break-word; font-weight:600; }
+  #missBox.none #missText { font-weight:400; color:var(--muted); }
+  .rdot { display:inline-block; width:11px; height:11px; border-radius:50%; background:#d92d20; margin-right:8px; vertical-align:middle; flex:0 0 auto; }
+  #dlist .pkitem { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .pend { font-size:12px; color:#b54708; font-weight:600; white-space:nowrap; }
+</style>
+</head>
+<body>
+<header>
+  <div id="ttl"><h1><span class="long">Damper Inspection</span><span class="short">Dampers</span></h1><span id="net">Online</span></div>
+  <button class="small secondary" id="btnSort" style="color:#fff;border-color:#fff">Sort</button>
+  <button class="small secondary" id="btnMsgs" style="color:#fff;border-color:#fff;position:relative">Messages<span id="msgDot" hidden style="position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;background:#f79009"></span></button>
+  <button class="small secondary" id="btnSettings" style="color:#fff;border-color:#fff">Settings</button>
+  <button class="small secondary" id="btnHelp" aria-label="Help" style="color:#fff;border-color:#fff;border-radius:50%;width:34px;height:34px;padding:0">?</button>
+</header>
+
+<main>
+  <section id="home">
+    <div class="card">
+      <div hidden><select id="mView"><option value="">All dampers in this table</option></select></div>
+      <div class="row" style="margin-bottom:12px">
+        <button type="button" class="secondary small" id="btnNew">+ New damper</button>
+        <button type="button" class="secondary small" id="btnLists">↻ Refresh lists</button>
+      </div>
+      <p class="hint" id="dl" hidden style="margin:-4px 0 10px"></p>
+      <p id="hMsg" hidden style="margin:-4px 0 10px;font-weight:600"></p>
+      <div id="hFilters" style="display:none;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:8px">
+        <select id="hBld" aria-label="Building"></select>
+        <select id="hFlr" aria-label="Floor"></select>
+        <select id="hIns" aria-label="Inspector"></select>
+        <select id="hView" aria-label="Layout"><option value="status">Sort by status</option><option value="all">All Dampers</option></select>
+      </div>
+      <input id="hSearch" type="search" placeholder="Search dampers…" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button type="button" class="secondary small" id="hMiss" hidden style="margin-top:8px"></button>
+      <p class="hint" id="hCount" style="margin:8px 0 0"></p>
+      <div id="dlist"></div>
+    </div>
+    <section class="card" id="savedCard" hidden style="margin-top:12px">
+    <div class="row" style="align-items:center;margin-bottom:8px">
+      <h2 style="flex:2;font-size:16px" id="count"></h2>
+      <button class="small" id="btnSync">Sync now</button>
+    </div>
+    <details id="savedDet"><summary class="hint" style="cursor:pointer">Show details</summary>
+    <div id="list" style="margin-top:8px"></div>
+    <div class="row" style="margin-top:8px">
+      <button class="small secondary" id="btnClear">Clear synced</button>
+    </div></details>
+    </section>
+  </section>
+
+  <dialog id="detail">
+    <div id="detailHead">
+      <button type="button" id="btnBack" aria-label="Close">×</button>
+      <b id="dTitle"></b>
+    </div>
+    <div id="detailBody">
+      <div id="missBox" hidden><div class="mk">Missing Fields / Inconsistencies</div><div id="missText"></div></div>
+      <div id="draftBar" class="hint" style="display:none;align-items:center;gap:8px;margin:0 0 10px">
+        <span style="flex:1">Your unsaved changes were restored.</span>
+        <button type="button" class="secondary small" id="btnDiscard" style="flex:0 0 auto">Discard</button>
+      </div>
+      <form id="form" autocomplete="off">
+        <div id="newBox" hidden></div>
+        <div id="fields"></div>
+        <div class="sect">Photos (saved offline)</div>
+        <p class="hint">Photos are shrunk on your device and kept until they upload.</p>
+        <div id="photoBlocks"></div>
+        <div id="fields2" style="margin-top:12px"></div>
+        <p id="formMsg" hidden style="margin:16px 0 0;font-weight:700;color:#d92d20"></p>
+        <div class="row" style="margin-top:20px">
+          <button type="submit">Save entry</button>
+        </div>
+      </form>
+    </div>
+    <div id="navBar"><button type="button" id="navPrev" aria-label="Previous damper">‹</button><span id="navPos"></span><button type="button" id="navNext" aria-label="Next damper">›</button></div>
+  </dialog>
+</main>
+
+<dialog id="dlg">
+  <form method="dialog" id="setForm">
+    <h2>Airtable connection</h2>
+    <label for="sTok">Personal access token</label>
+    <input id="sTok" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <p class="hint">Stored only on this device. Give it write access to this one base only.</p>
+    <div class="row" style="margin-top:8px">
+      <button type="button" class="secondary small" id="sShow">Show token</button>
+    </div>
+    <label for="sBase">Base ID (starts with app)</label>
+    <input id="sBase" autocomplete="off">
+    <label for="sTable">Table name or ID</label>
+    <input id="sTable" autocomplete="off">
+    <div hidden><select id="sView"><option value="">All dampers in this table</option></select></div>
+    <div hidden>
+      <select id="sIdField"><option value="">Automatic</option></select>
+    </div>
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;color:var(--muted);font-size:14px">Troubleshooting</summary>
+      <div class="row" style="margin-top:8px">
+        <button type="button" class="secondary small" id="sTest">Test token</button>
+        <button type="button" class="secondary small" id="sTables">Show tables</button>
+      </div>
+      <p class="hint" id="sResult"></p>
+      <div id="sTablesOut" hidden></div>
+      <p class="hint" id="sVer"></p>
+    </details>
+    <div class="row" style="margin-top:16px">
+      <button type="button" class="secondary" id="sCancel">Cancel</button>
+      <button type="submit" id="sSave">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="picker">
+  <h2 id="pkTitle"></h2>
+  <div id="pkFilters" style="display:none;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+    <select id="pkBld" aria-label="Building"></select>
+    <select id="pkFlr" aria-label="Floor"></select>
+  </div>
+  <input id="pkSearch" type="search" placeholder="Search…" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <div id="pkList"></div>
+  <button type="button" class="secondary" id="pkClose" style="width:100%">Cancel</button>
+</dialog>
+
+<dialog id="helpDlg">
+  <h2>How this works</h2>
+  <div id="helpBody" style="max-height:62vh;overflow:auto">
+    <div class="hq"><span class="rdot"></span><b>Red dot</b></div>
+    <p>Someone started this damper, but some info is still missing or doesn't match. Tap the damper. The top of the page tells you what to fix.</p>
+    <div class="hq"><b>Tap a damper</b></div>
+    <p>Opens its page. Fill in what you need, add photos, then tap <b>Save entry</b>. Tap the <b>×</b> to close the page.</p>
+    <div class="hq"><b>↻ Refresh lists</b></div>
+    <p>Gets the newest dampers, info and photos. Tap it when you have Wi-Fi or signal, and before you go somewhere with no signal.</p>
+    <div class="hq"><b>No signal? No problem.</b></div>
+    <p>Keep working. Your entries are saved on your phone and sent by themselves when the signal comes back. <b>waiting to sync</b> means it hasn't been sent yet.</p>
+    <div class="hq"><b>Unfinished work is kept</b></div>
+    <p>Anything you type or photograph is kept even if you close the page without saving. The damper shows <b>draft</b>, but it is not sent until you tap <b>Save entry</b>.</p>
+    <div class="hq"><b>Photos</b></div>
+    <p>Photos already taken show in each box. Tap <b>Take photo</b> to use the camera, or <b>Upload file</b> to pick one you already have. Photos from the camera are also kept in your phone's Photos app.</p>
+    <div class="hq"><b>Menus (Pass, Fail...)</b></div>
+    <p>Tap a title to open or close that group.</p>
+    <div class="hq"><b>Sort</b></div>
+    <p>At the top. Puts the list in order by inspection date. Tap again to switch the direction, then again to turn it off.</p>
+    <div class="hq"><b>Messages</b></div>
+    <p>Normally empty. If it has an orange dot, something went wrong that needs fixing. Open it and tell Avery what it says, including the code number (like 422). Tap <b>Copy for Avery</b> to copy it so you can paste it into a text.</p>
+    <div class="hq"><b>The top bar color</b></div>
+    <p>Green means you have signal. Red means you don't. Both are fine. Keep working either way.</p>
+    <div class="hq"><b>+ New damper</b></div>
+    <p>Only use this for a damper that is not in the list yet.</p>
+  </div>
+  <div class="row" style="margin-top:12px"><button type="button" id="helpClose">Got it</button></div>
+</dialog>
+
+<dialog id="msgDlg">
+  <h2>Messages</h2>
+  <p class="hint" style="margin:0 0 8px">If anything is listed here, tell Avery what it says, including the code number.</p>
+  <div id="msgList" style="max-height:55vh;overflow:auto"></div>
+  <div class="row" style="margin-top:12px">
+    <button type="button" class="secondary" id="msgCopy">Copy for Avery</button>
+    <button type="button" id="msgClose">Close</button>
+  </div>
+</dialog>
+
+<script>
+/* ============ FORM SETUP ============
+   key   = the EXACT Airtable field name (capitals and spaces must match)
+   label = what the screen shows (optional)
+   type  = text | textarea | select | number | date
+   keep  = true: value stays filled in after saving (floor, inspector, date)
+   half  = true: sits side by side with the next half field */
+const FIELDS = [
+  { key: 'Damper type',              type: 'select', newOnly: true },
+  { key: 'Floor',                    type: 'select', newOnly: true },
+  { key: 'Damper ID #',              label: 'Damper ID # (just the number)', type: 'text', newOnly: true },
+  { key: 'Damper IDs',               type: 'select', existing: true, required: true },
+  { key: 'Inspector(s)',             type: 'select', keep: true, multi: true },
+  { key: 'Room/location',            type: 'text' },
+  { key: 'Inspection Date',          type: 'date', keep: true },
+  { key: 'Barrier Rating',           type: 'select' },
+  // late: true = shown after the photos.  multi: true = can pick more than one from the list
+  { key: 'Inspection Field Notes',   type: 'textarea', late: true },
+  { key: 'Damper Mechanism',         type: 'select', late: true },
+  { key: 'Operational Test',         type: 'select', late: true },
+  { key: 'Inspection Note - Select', type: 'select', late: true, multi: true },
+  { key: 'Suggested Follow-up',      type: 'select', late: true, multi: true },
+  { key: 'Special Conditions - Inspections', type: 'select', late: true, multi: true },
+];
+
+/* Attachment fields to fill while offline (exact Airtable names).
+   Location Pic is not here on purpose. */
+const PHOTOS = [
+  'ID Tag - Ceiling Grid',
+  'ID Tag - Damper',
+  'Zoom Out Duct',
+  'Open Damper',
+  'Closed Damper',
+  'Additional Pictures',
+  'Actuator Device',
+  'Location Pic', // shown under Inspector(s), not in the photo list below
+];
+/* ====================================== */
+
+const MAX_DIM = 1600, JPEG_Q = 0.8, TIMEOUT_MS = 45000;
+const $ = (id) => document.getElementById(id);
+/* Views offered in Settings. Put the names of the views listed under TECH VIEWS here, exactly as
+   they appear in Airtable, e.g. ['Damper Survey', 'Floor 2']. Leave empty to offer every view. */
+const TECH_VIEWS = [];
+/* Text columns shown in the info card (photos are always all shown). */
+const INFO_FIELDS = ['Inspection Date', 'Inspector(s)'];
+const MISS_FIELD = 'Missing Fields / Inconsistencies'; // shown at the top of each damper's page and flagged in the list
+const DEFAULTS = { base: 'appljnHf6IudjojK5', table: 'AVERY APP TESTING' }; // IDs and names are not secrets
+const cfg = () => {
+  const s = JSON.parse(localStorage.getItem('cfg') || '{}');
+  return { token: s.token || '', base: s.base || DEFAULTS.base, table: s.table || DEFAULTS.table, view: s.view || '', idField: s.idField || '' };
+};
+// Column names: match ignoring capitals/spaces/punctuation, and remember the exact spelling Airtable uses
+const norm = (x) => String(x).toLowerCase().replace(/[^a-z0-9]+/g, '');
+// Turn a cell value (text, number, single/multi select, person...) into plain text
+const plain = (v) => {
+  if (v == null) return '';
+  if (Array.isArray(v)) return v.map(plain).filter((x) => x && !/^rec[A-Za-z0-9]{14}$/.test(x)).join(', ');
+  if (typeof v === 'object') return String(v.name || v.email || '');
+  return String(v).trim();
+};
+const getNames = () => { try { return JSON.parse(localStorage.getItem('names') || '{}'); } catch { return {}; } };
+const colOf = (k) => getNames()[k] || k;
+// Columns Airtable calculates by itself: nothing can be written to them
+const COMPUTED = /^(formula|rollup|multipleLookupValues|count|createdTime|lastModifiedTime|autoNumber|button|createdBy|lastModifiedBy|externalSyncSource|aiText)$/;
+// If two columns have almost the same name (say a link column and a lookup copy of it), use the one that can be edited
+const findField = (t, name) => {
+  const loose = t.fields.filter((x) => norm(x.name) === norm(name));
+  return loose.find((x) => !COMPUTED.test(x.type) && x.name === name) || loose.find((x) => !COMPUTED.test(x.type)) || loose.find((x) => x.name === name) || loose[0];
+};
+// Use the table's exact ID once it is known (names must match capitals exactly, IDs always do)
+const tableRef = (c) => (/^tbl/.test(c.table) ? c.table : localStorage.getItem('tid') || c.table);
+// Save connection settings; if the base or table changed, drop the lists that belonged to the old one
+function saveCfg(next) {
+  const prev = cfg();
+  localStorage.setItem('cfg', JSON.stringify(next));
+  if (prev.base !== next.base || prev.table !== next.table || prev.view !== next.view || prev.idField !== next.idField) {
+    localStorage.removeItem('names'); localStorage.removeItem('opts'); localStorage.removeItem('tid'); localStorage.removeItem('vname');
+    buildFields();
+  }
+}
+const keeps = () => JSON.parse(localStorage.getItem('keeps') || '{}');
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+/* ---------- IndexedDB ---------- */
+let dbp;
+function db() {
+  return dbp ||= new Promise((res, rej) => {
+    const r = indexedDB.open('intake', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('q', { keyPath: 'id' });
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function tx(mode, fn) {
+  const d = await db();
+  return new Promise((res, rej) => {
+    const t = d.transaction('q', mode), s = t.objectStore('q');
+    const out = fn(s);
+    t.oncomplete = () => res(out && out.result !== undefined ? out.result : undefined);
+    t.onerror = () => rej(t.error);
+  });
+}
+const putItem = (it) => tx('readwrite', (s) => s.put(it));
+const delItem = (id) => tx('readwrite', (s) => s.delete(id));
+const allItems = () => tx('readonly', (s) => s.getAll()).then((r) => (r || []).sort((a, b) => b.createdAt - a.createdAt));
+
+/* ---------- Searchable picker for long lists ---------- */
+function openPicker(f, target) {
+  const o = getOpts()[f.key];
+  let all = (o && o.choices) || [];
+  if (o && o.used && Object.keys(o.used).length) { // choices already used on other dampers come first
+    const u = o.used, ix = new Map(all.map((x, i) => [x, i]));
+    all = [...all].sort((a, b) => (!u[b] - !u[a]) || (u[b] || 0) - (u[a] || 0) || ix.get(a) - ix.get(b));
+  }
+  const multi = !!f.multi;
+  let sel = []; try { sel = JSON.parse(target.dataset.sel || '[]'); } catch {}
+  $('pkClose').textContent = multi ? 'Done' : 'Cancel';
+  $('pkClose').className = multi ? '' : 'secondary';
+  const dlg = $('picker'), search = $('pkSearch'), list = $('pkList');
+  $('pkTitle').textContent = f.label || f.key;
+  // Building comes from the label ("Building A · FD-1-011"); floor is the 2nd number in the ID (FD-2-009 = floor 2)
+  const parts = (n) => {
+    const i = n.indexOf(' · '), id = i < 0 ? n : n.slice(i + 3);
+    const m = id.match(/^[^\d]*?\d*[-\s_.]+(\d+)[-\s_.]/);
+    return { b: i < 0 ? '' : n.slice(0, i), fl: m ? String(parseInt(m[1], 10)) : '' };
+  };
+  const info = all.map(parts);
+  const bl = [...new Set(info.map((x) => x.b).filter(Boolean))];
+  const fl = [...new Set(info.map((x) => x.fl).filter(Boolean))].sort((a, b) => a - b);
+  const bSel = $('pkBld'), fSel = $('pkFlr'), box = $('pkFilters');
+  const fill = (el, first, vals, fmt) => { el.textContent = ''; [['', first], ...vals.map((v) => [v, fmt ? fmt(v) : v])].forEach(([v, t]) => el.append(new Option(t, v))); };
+  const useF = !!f.existing && (bl.length > 1 || fl.length > 1);
+  box.style.display = useF ? 'grid' : 'none';
+  if (useF) { fill(bSel, 'All buildings', bl); fill(fSel, 'All floors', fl, (v) => 'Floor ' + v); bSel.style.display = bl.length > 1 ? '' : 'none'; fSel.style.display = fl.length > 1 ? '' : 'none'; }
+  const draw = (keep) => {
+    const q = search.value.trim().toLowerCase();
+    const bv = useF ? bSel.value : '', fv = useF ? fSel.value : '';
+    const hits = all.filter((n, i) => (!q || n.toLowerCase().includes(q)) && (!bv || info[i].b === bv) && (!fv || info[i].fl === fv));
+    const keepTop = list.scrollTop;
+    list.textContent = '';
+    hits.slice(0, 1000).forEach((n) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'pkitem'; b.textContent = n;
+      if (multi) {
+        const on = sel.includes(n);
+        b.textContent = (on ? '✓ ' : '') + n; b.style.fontWeight = on ? '700' : '500';
+        b.onclick = () => {
+          sel = sel.includes(n) ? sel.filter((x) => x !== n) : [...sel, n];
+          target.dataset.sel = JSON.stringify(sel); target.value = sel.join(', '); scheduleDraft();
+          draw(true);
+        };
+      } else b.onclick = () => { target.value = n; dlg.close(); if (f.existing) { showInfo(n); applyFill(n); } };
+      list.append(b);
+    });
+    list.scrollTop = keep === true ? keepTop : 0;
+    if (!hits.length) list.textContent = 'No matches';
+    else if (hits.length > 1000) { const m = document.createElement('p'); m.className = 'hint'; m.textContent = `Showing 1000 of ${hits.length}. Keep typing to narrow it down.`; list.append(m); }
+  };
+  list.scrollTop = 0;
+  search.value = ''; search.oninput = () => draw(); bSel.onchange = () => draw(); fSel.onchange = () => draw(); draw();
+  dlg.showModal();
+}
+$('pkClose').onclick = () => $('picker').close();
+
+/* ---------- Damper info card (like the Airtable record view) ---------- */
+// All the text fields are saved on the device (Cache storage) when the lists refresh, so this works offline too
+const DKEY = 'https://local.invalid/damper-details';
+async function saveDetail(d) { try { await (await caches.open('intake-data')).put(DKEY, new Response(JSON.stringify(d))); } catch {} }
+async function loadDetail() { try { const r = await (await caches.open('intake-data')).match(DKEY); return r ? await r.json() : null; } catch { return null; } }
+// When a damper is picked, fill the form with whatever Airtable already has for it
+let lastFilled = {};
+async function applyFill(label) {
+  const ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key], recId = o && o.recs && o.recs[label];
+  const d = await loadDetail();
+  const mine = (d && d.fill && recId && d.fill[recId]) || {};
+  // undo what the previous damper filled in (only if the tech did not change it since)
+  for (const [k, v] of Object.entries(lastFilled)) { const f = FIELDS.find((x) => x.key === k), el = f && $(fid(k)); if (el && el.value === v) { el.value = f.keep ? (keeps()[k] || (f.type === 'date' ? today() : '')) : ''; if (f.multi) el.dataset.sel = ''; } }
+  lastFilled = {};
+  for (const f of FIELDS) {
+    if (f.existing || f.newOnly) continue;
+    let val = mine[f.key]; if (val == null) continue;
+    const el = $(fid(f.key)), po = getOpts()[f.key] || {};
+    if (f.multi) {
+      let names = val;
+      if (po.type === 'multipleRecordLinks') { const inv = {}; for (const [lb, id] of Object.entries(po.recs || {})) inv[id] = lb; names = val.map((id) => inv[id]).filter(Boolean); }
+      if (!names.length) continue;
+      el.dataset.sel = JSON.stringify(names); el.value = names.join(', ');
+    } else {
+      el.value = val;
+      if (el.value !== val) continue; // not one of the list's choices
+    }
+    lastFilled[f.key] = el.value;
+  }
+}
+function clearEx() { for (const n of PHOTOS) { const e = $('ex_' + fid(n)); if (e) { e.hidden = true; e.textContent = ''; } } }
+function hideInfo() { clearEx(); const i = $('info'); if (i) { i.hidden = true; i.textContent = ''; } }
+let infoSeq = 0;
+async function showInfo(label) {
+  const inf = $('info'); if (!inf) return;
+  const ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key], recId = o && o.recs && o.recs[label];
+  const seq = ++infoSeq;
+  if (!recId) { hideInfo(); return; }
+  const d = await loadDetail();
+  if (seq !== infoSeq) return;
+  clearEx(); inf.textContent = ''; inf.hidden = true; // the info card itself is not shown; only the photo boxes and the filled-in fields are used
+  const sm = document.createElement('summary'); sm.textContent = 'Info for ' + label; inf.append(sm);
+  const row = (k, v) => { const r = document.createElement('div'); r.className = 'irow'; const a = document.createElement('div'); a.className = 'ik'; a.textContent = k; const b = document.createElement('div'); b.className = 'iv'; b.textContent = v; r.append(a, b); return r; };
+  const rec = d && d.recs && d.recs[recId];
+  if (!rec) inf.append(row('Info', 'Not saved on this device yet. Tap Refresh lists while online.'));
+  else {
+    for (const k of d.order) if (rec[k]) inf.append(row(k, rec[k]));
+    if (!Object.keys(rec).length) inf.append(row('Info', 'No other details filled in for this damper.'));
+    if (d.at) { const t = document.createElement('div'); t.className = 'hint'; t.textContent = 'Saved ' + new Date(d.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); inf.append(t); }
+  }
+  // photos already in Airtable: previews saved on this device, or fetched live when online
+  const c = cfg();
+  let groups = [];
+  const saved = (d && d.pics && d.pics[recId]) || {};
+  if (navigator.onLine && c.token) {
+    try {
+      const r = await fetch(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}/${recId}`, { headers: { Authorization: 'Bearer ' + c.token } });
+      if (r.ok) {
+        const f = (await r.json()).fields || {};
+        for (const name of (d && d.photos) || []) {
+          const at = f[name]; if (!Array.isArray(at) || !at.length) continue;
+          groups.push({ name, atts: at.map((a) => ({ id: a.id, filename: a.filename, full: a.url, thumb: a.thumbnails && (a.thumbnails.large || a.thumbnails.small || {}).url })) });
+        }
+      }
+    } catch { /* fall back to what is saved */ }
+  }
+  if (!groups.length) groups = Object.entries(saved).map(([name, atts]) => ({ name, atts: atts.map((a) => ({ id: a.id, filename: a.fn })) }));
+  if (seq !== infoSeq) return;
+  const pc = await caches.open('intake-photos').catch(() => null);
+  const names = getNames();
+  for (const g of groups) {
+    // photos for one of the 7 boxes go into that box; any other photo column stays in the info card
+    const mine = PHOTOS.find((n) => norm(names[n] || n) === norm(g.name));
+    const blk = document.createElement('div'); blk.className = 'irow';
+    const k = document.createElement('div'); k.className = 'ik'; k.textContent = g.name + ' (' + g.atts.length + ')'; if (mine) k.hidden = true;
+    const th = document.createElement('div'); th.className = 'ith';
+    blk.append(k, th);
+    if (mine) { const ex = $('ex_' + fid(mine)); ex.textContent = ''; ex.hidden = false; ex.append(blk); blk.style.borderTop = '0'; } else inf.append(blk);
+    for (const a of g.atts) {
+      let src = a.thumb || '';
+      try { const hit = pc && await pc.match(PKEY + a.id); if (hit) src = URL.createObjectURL(await hit.blob()); } catch {}
+      const link = document.createElement('a'); link.target = '_blank'; link.rel = 'noopener';
+      if (a.full) link.href = a.full; else if (src) link.href = src;
+      if (src) { const im = document.createElement('img'); im.src = src; im.loading = 'lazy'; link.append(im); } else link.textContent = a.filename || 'photo (not saved)';
+      th.append(link);
+    }
+  }
+}
+
+// Photos are saved on the device (medium-size previews) so they can be seen offline too
+const PKEY = 'https://local.invalid/photo/';
+let photoJob = false;
+function setDl(msg) { const e = $('dl'); if (!e) return; e.hidden = !msg; e.textContent = msg || ''; }
+async function savePhotos(c, t, viewQ, photoNames) {
+  if (photoJob || !navigator.onLine || !photoNames.length) return;
+  photoJob = true;
+  let done = 0, failed = 0, total = 0, lastWhy = '', lastWhyText = '';
+  try {
+    const cache = await caches.open('intake-photos');
+    const have = new Set((await cache.keys()).map((r) => r.url.slice(PKEY.length)));
+    const pics = {}, todo = [], seen = new Set();
+    let offset = '';
+    for (let pg = 0; pg < 100; pg++) {
+      const r = await airtableGet(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}?pageSize=100${photoNames.map((n) => '&fields%5B%5D=' + encodeURIComponent(n)).join('')}${viewQ}${offset ? '&offset=' + encodeURIComponent(offset) : ''}`, { headers: { Authorization: 'Bearer ' + c.token } });
+      if (!r.ok) break;
+      const j = await r.json();
+      for (const rec of j.records) for (const n of photoNames) {
+        const at = rec.fields[n]; if (!Array.isArray(at)) continue;
+        for (const a of at) {
+          (pics[rec.id] ||= {})[n] ||= [];
+          pics[rec.id][n].push({ id: a.id, fn: a.filename || '' });
+          seen.add(a.id);
+          const u = a.thumbnails && (a.thumbnails.large || a.thumbnails.small || {}).url;
+          if (u && !have.has(a.id)) todo.push({ id: a.id, u });
+        }
+      }
+      if (!j.offset) break;
+      offset = j.offset;
+    }
+    const d = await loadDetail(); if (d) { d.pics = pics; await saveDetail(d); renderHome(); }
+    total = todo.length;
+    let next = 0;
+    const worker = async () => {
+      while (next < todo.length) {
+        const it = todo[next++];
+        try {
+          const res = await fetch(it.u);
+          if (!res.ok) throw new Error(res.status);
+          await cache.put(PKEY + it.id, new Response(await res.blob()));
+          done++;
+        } catch (e) { failed++; lastWhy = (e && e.message && /^\d{3}$/.test(e.message)) ? e.message : ''; lastWhyText = e && e.message ? e.message : String(e); if (e && /quota/i.test(String(e.name) + String(e.message))) { next = todo.length; } }
+        setDl('Saving photos for offline: ' + (done + failed) + ' of ' + total);
+      }
+    };
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    // forget previews of photos that no longer exist
+    for (const id of have) if (!seen.has(id)) await cache.delete(PKEY + id);
+    setErr('err_photos', failed ? { t: Date.now(), code: String(lastWhy || ''), text: `${failed} of ${total} photos could not be saved for offline viewing (${lastWhyText || 'unknown reason'}). Tap Refresh lists to retry.` } : null);
+  } catch (e) { setErr('err_photos', { t: Date.now(), code: '', text: 'Could not save photos for offline: ' + (e && e.message ? e.message : e) }); }
+  updateMsgDot();
+  photoJob = false;
+  setDl(total && failed ? 'Some photos could not be saved. Tap Refresh lists to retry.' : '');
+}
+
+/* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
+const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
+const APP_VERSION = '2026-10-21-l';
+let quietRetry = false;
+function report(msg, manual) {
+  // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
+  if (!/lists loaded/.test(msg) && /error (429|5\d\d)/i.test(msg) && !quietRetry) {
+    quietRetry = true;
+    setTimeout(() => { refreshOptions(manual).finally(() => { quietRetry = false; }); }, 4000);
+    return;
+  }
+  // Real problems go in Messages (with the code); a lost connection or a refresh already running is not a problem
+  if (/lists loaded/.test(msg)) setErr('err_refresh', null);
+  else if (!/Could not reach Airtable|Needs a connection|Still loading/i.test(msg)) { const m = msg.match(/error (\d{3})/i);
+    // keep only the part that matters: drop the table name up front and the long list of columns at the end
+    const short = msg.replace(/^Table "[^"]*"( › [^\s]+)?\s*/, '').replace(/\s*Its columns are:.*$/, '').replace(/^has no column called:/, 'No column called:').slice(0, 300);
+    setErr('err_refresh', { t: Date.now(), code: m ? m[1] : '', text: short }); }
+  updateMsgDot();
+  // Keep the note short; the full details go in Messages and Settings > Troubleshooting
+  const r = $('sResult'); if (r) { r.textContent = msg; r.style.fontWeight = '600'; r.style.color = 'var(--ink)'; }
+}
+// With no column chosen in Settings, use "Damper ID" or "Damper IDs", whichever actually has the IDs in it
+async function pickIdColumn(t, c, viewQ) {
+  const names = ['damper ids', 'damper id'];
+  const cands = t.fields.filter((x) => names.includes(x.name.trim().toLowerCase()));
+  if (!cands.length) return findField(t, 'Damper IDs');
+  if (cands.length === 1) return cands[0];
+  const qs = cands.map((x) => 'fields%5B%5D=' + encodeURIComponent(x.name)).join('&');
+  const rr = await airtableGet(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}?pageSize=100&${qs}${viewQ}`, { headers: { Authorization: 'Bearer ' + c.token } });
+  if (!rr.ok) return cands[0];
+  const rows = (await rr.json()).records;
+  const filled = (x) => rows.filter((r) => { const v = Array.isArray(r.fields[x.name]) ? r.fields[x.name][0] : r.fields[x.name]; return v != null && typeof v !== 'object' && String(v).trim() !== ''; }).length;
+  return cands.map((x) => ({ x, n: filled(x) })).sort((a, b) => b.n - a.n)[0].x;
+}
+async function refreshOptionsInner(manual) {
+  const c = cfg();
+  if (!c.token) { if (manual) toast('Add your token in Settings first'); return; }
+  if (!navigator.onLine) { if (manual) toast('Needs a connection'); return; }
+  try {
+    const r = await airtableGet(`https://api.airtable.com/v0/meta/bases/${c.base}/tables`, { headers: { Authorization: 'Bearer ' + c.token } });
+    if (!r.ok) {
+      report(r.status === 401 || r.status === 403 ? 'Token needs the schema.bases:read scope and access to this base (error ' + r.status + ')' : 'Could not load lists (error ' + r.status + ')', manual);
+      return;
+    }
+    const want = c.table.trim().toLowerCase(), wantView = c.view.trim().toLowerCase();
+    const tables = (await r.json()).tables;
+    saveSchema(tables);
+    const isView = (v, w) => v.id === w || v.name.toLowerCase() === w;
+    let t = tables.find((x) => x.id === c.table || x.name.toLowerCase() === want), vid = '', vname = '';
+    if (!t) { // maybe a view name was typed where the table goes: use that view's table
+      for (const tb of tables) { const v = (tb.views || []).find((x) => isView(x, want)); if (v) { t = tb; vid = v.id; vname = v.name; break; } }
+    }
+    if (t && wantView) {
+      const v = (t.views || []).find((x) => isView(x, wantView) || x.id === c.view);
+      if (v) { vid = v.id; vname = v.name; }
+      else { // that view is gone (or belongs to another table): show everything instead of failing
+        try { localStorage.setItem('cfg', JSON.stringify({ ...JSON.parse(localStorage.getItem('cfg') || '{}'), view: '' })); } catch {}
+        fillMainView();
+      }
+    }
+    if (!t) { report('Table "' + c.table + '" not found in this base. Check the table name in Settings (tap Show tables to see them).', manual); return; }
+    localStorage.setItem('tid', t.id); localStorage.setItem('vname', vname);
+    const viewQ = ''; // never limit to a saved view: always load every row
+    const out = {}, missing = [], problems = [], names = {}, notes = [];
+    let pendingDetail = null, pendingRaw = {};
+    for (const f of FIELDS) {
+      if (f.type !== 'select') { // plain fields: just find the exact column name
+        const fl = findField(t, f.key);
+        if (fl) names[f.key] = fl.name; else missing.push(f.key);
+        continue;
+      }
+      const want = f.existing && c.idField ? c.idField : f.key;
+      const fld = f.existing && !c.idField ? await pickIdColumn(t, c, viewQ) : findField(t, want);
+      if (!fld) { missing.push(want); continue; }
+      names[f.key] = fld.name;
+      if (!f.existing && COMPUTED.test(fld.type)) problems.push('"' + fld.name + '" is a calculated column in Airtable (' + fld.type + '), so nothing can be saved to it. Is there another column with a similar name?');
+      out[f.key] = { type: fld.type, choices: ((fld.options && fld.options.choices) || []).map((x) => x.name) };
+      if (f.multi && fld.type === 'multipleRecordLinks' && fld.options && fld.options.linkedTableId) {
+        // linked-record field: the choices are the rows of the linked table (shown by its first column)
+        const lt = tables.find((x) => x.id === fld.options.linkedTableId);
+        const pf = lt && (lt.fields.find((x) => x.id === lt.primaryFieldId) || lt.fields[0]);
+        const recs = {};
+        if (pf) {
+          let lo = '';
+          for (let pg = 0; pg < 50; pg++) {
+            const lr = await airtableGet(`https://api.airtable.com/v0/${c.base}/${lt.id}?pageSize=100&fields%5B%5D=${encodeURIComponent(pf.name)}${lo ? '&offset=' + encodeURIComponent(lo) : ''}`, { headers: { Authorization: 'Bearer ' + c.token } });
+            if (!lr.ok) { problems.push('Could not read the choices for "' + fld.name + '" from the "' + lt.name + '" table (error ' + lr.status + ').'); break; }
+            const ld = await lr.json();
+            for (const x of ld.records) {
+              const base = plain(x.fields[pf.name]); if (!base) continue;
+              let k = base, n = 2; while (recs[k]) k = `${base} (${n++})`;
+              recs[k] = x.id;
+            }
+            if (!ld.offset) break;
+            lo = ld.offset;
+          }
+        }
+        out[f.key].recs = recs;
+        out[f.key].choices = Object.keys(recs).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      }
+      if (f.existing) {
+        const bld = findField(t, 'Building');
+        const bcol = bld && bld.name !== fld.name ? bld : null;
+        const rows = [];
+        // Linked-record fields only come back as record IDs, so look up the names in the linked tables
+        const bnames = {};
+        const linkNames = {};
+        const ensureLinks = async (fd) => {
+          const tid = fd.options && fd.options.linkedTableId;
+          if (!tid || linkNames[tid] || Object.keys(linkNames).length >= 8) return;
+          linkNames[tid] = {};
+          const lt = tables.find((x) => x.id === tid);
+          const pf = lt && (lt.fields.find((x) => x.id === lt.primaryFieldId) || lt.fields[0]);
+          if (!pf) return;
+          let lo = '';
+          for (let pg = 0; pg < 50; pg++) {
+            const lr = await airtableGet(`https://api.airtable.com/v0/${c.base}/${lt.id}?pageSize=100&fields%5B%5D=${encodeURIComponent(pf.name)}${lo ? '&offset=' + encodeURIComponent(lo) : ''}`, { headers: { Authorization: 'Bearer ' + c.token } });
+            if (!lr.ok) { problems.push('Could not read names from the "' + lt.name + '" table (error ' + lr.status + ').'); break; }
+            const ld = await lr.json();
+            for (const x of ld.records) linkNames[tid][x.id] = plain(x.fields[pf.name]);
+            if (!ld.offset) break;
+            lo = ld.offset;
+          }
+        };
+        // every column except photos/buttons is saved so the whole record can be shown offline
+        const infoFields = t.fields.filter((x) => /Attachment/i.test(x.type) || INFO_FIELDS.some((n) => norm(n) === norm(x.name)));
+        const showCols = infoFields.filter((x) => !/Attachment/i.test(x.type));
+        for (const x of showCols) if (x.type === 'multipleRecordLinks') await ensureLinks(x);
+        if (bcol && bcol.type === 'multipleRecordLinks') await ensureLinks(bcol);
+        const lnk = (fd) => linkNames[fd.options && fd.options.linkedTableId] || {};
+        const bval = (v) => Array.isArray(v) ? v.map((x) => (bcol.type === 'multipleRecordLinks' ? lnk(bcol)[x] : '') || plain(x)).filter((x) => x && !/^rec[A-Za-z0-9]{14}$/.test(x)).join(', ') : plain(v);
+        const disp = (v, fd) => {
+          if (v == null) return '';
+          if (typeof v === 'boolean') return v ? '✓' : '';
+          if (Array.isArray(v)) return v.map((x) => (fd.type === 'multipleRecordLinks' ? lnk(fd)[x] : '') || (typeof x === 'object' && x ? (x.name || x.email || x.value || '') : String(x))).filter((x) => x && !/^rec[A-Za-z0-9]{14}$/.test(x)).join(', ');
+          if (typeof v === 'object') return String(v.name || v.email || v.value || '');
+          return String(v);
+        };
+        const det = {}, rawFill = {}, flags = {};
+        const missCol = findField(t, MISS_FIELD);
+        // the form's own fields are fetched too, so they can be filled in from what Airtable already has
+        const fillCols = FIELDS.filter((x) => !x.existing && !x.newOnly).map((x) => ({ key: x.key, fd: findField(t, x.key) })).filter((x) => x.fd);
+        const wantCols = [...new Set([fld.name, ...(bcol ? [bcol.name] : []), ...showCols.map((x) => x.name), ...fillCols.map((x) => x.fd.name), ...(missCol ? [missCol.name] : [])])];
+        const colsQ = wantCols.map((n) => '&fields%5B%5D=' + encodeURIComponent(n)).join('');
+        let offset = '', scanned = 0;
+        for (let page = 0; page < 50; page++) {
+          const rr = await airtableGet(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}?pageSize=100${colsQ}${viewQ}${offset ? '&offset=' + encodeURIComponent(offset) : ''}`,
+            { headers: { Authorization: 'Bearer ' + c.token } });
+          if (!rr.ok) { report('Could not finish loading the dampers (error ' + rr.status + '). Your last list was kept.', manual); return; }
+          const d = await rr.json();
+          scanned += d.records.length;
+          for (const rec of d.records) {
+            let v = rec.fields[fld.name];
+            if (Array.isArray(v)) v = v[0];
+            if (v == null || typeof v === 'object') continue;
+            const id = String(v).trim();
+            if (!id) continue;
+            rows.push({ id, b: bcol ? bval(rec.fields[bcol.name]) : '', rec: rec.id });
+            const o1 = {};
+            for (const x of showCols) { const dv = disp(rec.fields[x.name], x); if (dv !== '') o1[x.name] = dv; }
+            det[rec.id] = o1;
+            if (missCol) { const mv = disp(rec.fields[missCol.name], missCol).trim(); if (mv) flags[rec.id] = mv.slice(0, 1500); }
+            const rf = {};
+            for (const x of fillCols) if (rec.fields[x.fd.name] != null) rf[x.key] = rec.fields[x.fd.name];
+            rawFill[rec.id] = rf;
+          }
+          if (!d.offset) break;
+          offset = d.offset;
+        }
+        // Sort by building, then ID, and put the building in front so the same number in two buildings is easy to tell apart
+        const cmp = (x, y) => x.localeCompare(y, undefined, { numeric: true });
+        rows.sort((x, y) => (!x.b !== !y.b ? (x.b ? -1 : 1) : cmp(x.b, y.b) || cmp(x.id, y.id)));
+        const recs = {}, order = [];
+        let dup = false;
+        for (const r of rows) {
+          const label = r.b ? r.b + ' · ' + r.id : r.id;
+          let k = label, n = 2;
+          while (recs[k]) { k = `${label} (${n++})`; dup = true; }
+          recs[k] = r.rec; order.push(k);
+        }
+        if (bcol) { const blank = rows.filter((r) => !r.b).length; notes.push('Building column "' + bcol.name + '" (' + bcol.type + '): ' + (rows.length - blank) + ' dampers have a building, ' + blank + ' are blank.'); }
+        if (dup) notes.push(bcol ? 'Some dampers share both a building and an ID. They are marked (2), (3)…' : 'Some IDs appear more than once and no "Building" column was found to tell them apart.');
+        order.sort(cmpDamper);
+        out[f.key].recs = recs; out[f.key].scanned = scanned; out[f.key].col = fld.name;
+        pendingDetail = { order: showCols.map((x) => x.name), photos: infoFields.filter((x) => /Attachment/i.test(x.type)).map((x) => x.name), recs: det, flags, at: Date.now() };
+        pendingRaw = rawFill;
+        out[f.key].choices = order;
+      }
+      if (/Collaborator/.test(fld.type)) {
+        // Airtable does not expose the collaborator list, so collect people already used in this column
+        const people = {};
+        for (const p of f.people || []) people[p.name] = { email: p.email };
+        let offset = '';
+        for (let page = 0; page < 10; page++) {
+          const rr = await airtableGet(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}?pageSize=100&fields%5B%5D=${encodeURIComponent(fld.name)}${offset ? '&offset=' + encodeURIComponent(offset) : ''}`,
+            { headers: { Authorization: 'Bearer ' + c.token } });
+          if (!rr.ok) { problems.push('Could not read the ' + fld.name + ' column (error ' + rr.status + '). The token needs data.records:read.'); break; }
+          const d = await rr.json();
+          for (const rec of d.records) {
+            const v = rec.fields[fld.name];
+            for (const u of Array.isArray(v) ? v : v ? [v] : []) if (u && (u.name || u.email)) people[u.name || u.email] = { id: u.id, email: u.email };
+          }
+          if (!d.offset) break;
+          offset = d.offset;
+        }
+        // also list everyone who has access to the base (Airtable gives their emails, not names)
+        try {
+          const cr = await airtableGet(`https://api.airtable.com/v0/meta/bases/${c.base}?include%5B%5D=collaborators`, { headers: { Authorization: 'Bearer ' + c.token } });
+          if (cr.ok) {
+            const cj = await cr.json(), ic = cj.individualCollaborators || {}, old = cj.collaborators || {};
+            const have = new Set(Object.values(people).flatMap((p) => [p.id, (p.email || '').toLowerCase()]).filter(Boolean));
+            const gc = cj.groupCollaborators || {};
+            for (const g of [...(gc.baseCollaborators || []), ...(gc.workspaceCollaborators || [])]) {
+              const gid = g.groupId || g.id, gn = g.name || g.email;
+              if (gid && gn && !have.has(gid)) { people[gn] = { id: gid }; have.add(gid); }
+            }
+            const nice = (em) => em.split('@')[0].split(/[._\-+]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+            for (const u of [...(ic.baseCollaborators || []), ...(ic.workspaceCollaborators || []), ...(old.baseCollaborators || []), ...(old.workspaceCollaborators || [])]) {
+              const uid = u.userId, em = u.email;
+              if (!em || have.has(uid) || have.has(em.toLowerCase())) continue;
+              people[u.name || nice(em)] = { id: uid, email: em }; have.add(uid); have.add(em.toLowerCase());
+            }
+          } else notes.push('To list everyone with access, not only people already assigned, add the workspacesAndBases:read permission to your token (error ' + cr.status + ').');
+        } catch { /* optional extra: ignore network hiccups */ }
+        out[f.key].people = people;
+        out[f.key].choices = Object.keys(people).sort((a, b) => a.localeCompare(b));
+      }
+    }
+    if (pendingDetail) {
+      // turn what Airtable holds for each damper into values the form can show
+      const fill = {};
+      for (const [rid, rf] of Object.entries(pendingRaw)) {
+        const o1 = {};
+        for (const f of FIELDS) {
+          const v = rf[f.key], ot = out[f.key] && out[f.key].type;
+          if (v == null || v === '' || (Array.isArray(v) && !v.length)) continue;
+          const nm = (x) => (x && typeof x === 'object' ? x.name || x.email || '' : String(x));
+          if (f.type === 'date') o1[f.key] = String(v).slice(0, 10);
+          else if (f.type !== 'select') o1[f.key] = Array.isArray(v) ? v.map(nm).filter(Boolean).join(', ') : String(v);
+          else if (ot === 'multipleRecordLinks') o1[f.key] = v.filter((x) => typeof x === 'string');
+          else if (f.multi) o1[f.key] = (Array.isArray(v) ? v : [v]).map(nm).filter(Boolean);
+          else o1[f.key] = nm(Array.isArray(v) ? v[0] : v);
+        }
+        if (Object.keys(o1).length) fill[rid] = o1;
+      }
+      pendingDetail.fill = fill;
+      for (const f of FIELDS) if (f.multi && out[f.key] && !/Collaborator/.test(out[f.key].type)) {
+        const used = {};
+        for (const o1 of Object.values(fill)) for (const v of o1[f.key] || []) used[v] = (used[v] || 0) + 1;
+        out[f.key].used = used;
+      }
+      const keepPics = await loadDetail();
+      pendingDetail.pics = (keepPics && keepPics.pics) || {};
+      await saveDetail(pendingDetail);
+      savePhotos(c, t, viewQ, pendingDetail.photos); // runs in the background
+    }
+    for (const name of PHOTOS) { const fl = findField(t, name); if (fl) names[name] = fl.name; else missing.push(name); }
+    localStorage.setItem('names', JSON.stringify(names));
+    localStorage.setItem('opts', JSON.stringify(out));
+    const snap = {};
+    for (const f of FIELDS) snap[f.key] = { v: $(fid(f.key)).value, sel: $(fid(f.key)).dataset.sel || '' };
+    buildFields();
+    for (const f of FIELDS) { const e = $(fid(f.key)); if (snap[f.key].v !== '') e.value = snap[f.key].v; if (snap[f.key].sel) e.dataset.sel = snap[f.key].sel; }
+    const ef = FIELDS.find((f) => f.existing), eo = out[ef.key];
+    if ($(fid(ef.key)).value) showInfo($(fid(ef.key)).value);
+    const summary = FIELDS.filter((f) => f.type === 'select').map((f) => {
+      const o = out[f.key]; if (!o) return f.key + ': not found';
+      return (f.existing ? 'Damper IDs from "' + o.col + '"' : f.key) + ': ' + o.choices.length + (f.existing ? ' of ' + o.scanned + ' rows' + (o.choices.length ? ' (' + o.choices.slice(0, 3).join(', ') + '…)' : '') : '');
+    }).join(', ');
+    const where = 'Table "' + t.name + '"' + (vname ? ' › ' + vname : '');
+    let msg;
+    if (missing.length) msg = where + ' has no column called: ' + missing.join(', ') + '. Its columns are: ' + t.fields.map((x) => x.name).join(', ') + '.';
+    else if (problems.length) msg = problems[0];
+    else msg = where + ': lists loaded (' + summary + ').';
+    if (!missing.length && !problems.length && eo && eo.scanned && eo.choices.length < eo.scanned / 2) msg += ' Most rows are empty in that column. Pick the column that shows each full damper ID under "Damper ID column" in Settings.';
+    if (notes.length && !missing.length && !problems.length) msg += ' ' + notes[0];
+    report(msg, manual);
+  } catch (err) {
+    const net = err instanceof TypeError && /fetch|network|load/i.test(String(err.message));
+    report(net ? 'Could not reach Airtable. Check your connection.' : 'Could not finish loading the lists: ' + (err && err.message ? err.message : err), manual);
+  }
+}
+// Damper order: by building, then floor (the middle number, so floors stay together), then the LAST number,
+// and when the same number is used for several types, alphabetically by type (FD, FSD, SD)
+function damperParse(l) {
+  const i = l.indexOf(' · '), b = i < 0 ? '' : l.slice(0, i), id = i < 0 ? l : l.slice(i + 3);
+  const m = id.match(/^\s*([A-Za-z]+)[-\s_.]*?(\d+)[-\s_.]+(\d+)/);
+  return m ? { b, id, t: m[1].toUpperCase(), f: +m[2], n: +m[3] } : { b, id, t: '', f: 0, n: Infinity };
+}
+function cmpDamper(a, c) {
+  const x = damperParse(a), y = damperParse(c);
+  if (!x.b !== !y.b) return x.b ? -1 : 1;
+  return x.b.localeCompare(y.b, undefined, { numeric: true })
+    || (x.n === Infinity && y.n === Infinity ? 0 : x.f - y.f)
+    || (x.n === y.n ? 0 : x.n < y.n ? -1 : 1)
+    || x.t.localeCompare(y.t)
+    || x.id.localeCompare(y.id, undefined, { numeric: true });
+}
+// Airtable allows about 5 requests a second; wait and retry when it says "slow down" (error 429)
+let nextSlot = 0;
+async function pace() { // about 4 requests a second in total, even when lists and photos load at the same time
+  const now = Date.now(), at = Math.max(now, nextSlot); nextSlot = at + 260;
+  if (at > now) await new Promise((res) => setTimeout(res, at - now));
+}
+async function airtableGet(url, init) {
+  for (let i = 0; i < 6; i++) {
+    await pace();
+    let r;
+    try { r = await fetch(url, init); } catch (e) { // a dropped connection: wait and try again before giving up
+      if (!navigator.onLine || i >= 3) throw e;
+      await new Promise((res) => setTimeout(res, 1000 * (i + 1))); continue;
+    }
+    if (r.status !== 429) return r;
+    await new Promise((res) => setTimeout(res, 1500));
+  }
+  await pace();
+  return fetch(url, init);
+}
+// Only one refresh at a time (saving settings, syncing and opening the app can all ask for one)
+let refreshing = false;
+async function refreshOptions(manual) {
+  if (refreshing) { if (manual) report('Still loading the lists. Try again in a few seconds.', manual); return; }
+  refreshing = true;
+  try { await refreshOptionsInner(manual); } finally { refreshing = false; fillMainView(); renderHome(); }
+}
+
+
+
+/* ---------- Form ---------- */
+const fid = (k) => 'f_' + k.replace(/\W+/g, '_');
+const CHIPCOL = { pass:'#c2f0c2', fail:'#ffc7d1', 'n/a':'#e4e7ec', 'no access':'#ffe0b3', 'smoke barrier':'#bfe3ff', 'no operational test yet':'#ffd8b5' };
+const PALETTE = ['#bfe3ff','#d9ccff','#ffd8b5','#c8f0e6','#ffe9a8','#f5cdf0','#d4e5b8','#e4e7ec'];
+function chipEl(v) {
+  const c = document.createElement('span'); c.className = 'chip'; c.textContent = v;
+  let h = 0; for (const ch of String(v)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  c.style.background = CHIPCOL[String(v).trim().toLowerCase()] || PALETTE[h % PALETTE.length];
+  return c;
+}
+const CHIP_FIELDS = ['Barrier Rating', 'Damper Mechanism', 'Operational Test'];
+function refreshChips() {
+  for (const k of CHIP_FIELDS) {
+    const el = $(fid(k)), cl = $('chip_' + fid(k)); if (!el || !cl) continue;
+    cl.textContent = ''; if (el.value) cl.append(chipEl(el.value));
+  }
+}
+document.addEventListener('change', (e) => { if (e.target.closest && e.target.closest('#detail')) refreshChips(); });
+document.addEventListener('input', (e) => { if (e.target.closest && e.target.closest('#detail')) refreshChips(); });
+function makeField(f) {
+  const wrap = document.createElement('div');
+  const l = document.createElement('label');
+  l.textContent = (f.label || f.key) + (f.required ? ' *' : '');
+  l.htmlFor = fid(f.key);
+  let el;
+  if (f.type === 'textarea') el = document.createElement('textarea');
+  else if (f.type === 'select') {
+    const o = getOpts()[f.key], list = (o && o.choices) || [];
+    if (f.existing && list.length) { // the chosen damper: tap to go back to the list
+      el = document.createElement('input'); el.type = 'text'; el.readOnly = true; el.autocomplete = 'off';
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', () => goBack());
+    } else if (f.multi) { // pick one or more from a list in the searchable picker
+      el = document.createElement('input'); el.type = 'text';
+      el.readOnly = true; el.autocomplete = 'off'; el.style.cursor = 'pointer';
+      el.placeholder = list.length ? 'Tap to choose (you can pick more than one)' : 'List not loaded yet. Tap Refresh lists at the top.';
+      if (list.length) el.addEventListener('click', () => openPicker(f, el));
+    } else if (list.length && f.existing) { // long list of existing rows: tap to open a searchable picker
+      el = document.createElement('input'); el.type = 'text';
+      el.readOnly = true; el.autocomplete = 'off';
+      el.placeholder = 'Tap to choose from ' + list.length + ' dampers';
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', () => openPicker(f, el));
+    } else if (list.length) {
+      el = document.createElement('select');
+      el.append(new Option('', ''));
+      list.forEach((n) => el.append(new Option(n, n)));
+    } else { // no list loaded yet: plain box so the field still works
+      el = document.createElement('input'); el.type = 'text';
+      el.placeholder = o && /Collaborator/.test(o.type) ? 'Email address' : 'Type it (pick-list loads when online)';
+      if (f.existing) { el.readOnly = true; el.placeholder = 'List not loaded yet. Tap Refresh lists at the top.'; }
+    }
+  } else {
+    el = document.createElement('input');
+    el.type = f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text';
+    if (f.type === 'number') { el.inputMode = 'decimal'; el.step = 'any'; }
+  }
+  el.id = fid(f.key);
+  if (f.required) el.required = true;
+  wrap.append(l, el);
+  if (CHIP_FIELDS.includes(f.key)) { const cl = document.createElement('div'); cl.className = 'chipline'; cl.id = 'chip_' + fid(f.key); wrap.append(cl); }
+  if (f.existing) { const inf = document.createElement('details'); inf.id = 'info'; inf.open = true; inf.hidden = true; wrap.append(inf); }
+  return wrap;
+}
+function buildFields() {
+  const lp = $('pb_' + fid(LOC_PIC)); if (lp) $('photoBlocks').append(lp); // keep it safe while the form is rebuilt
+  const box = $('fields'), box2 = $('fields2'); box.textContent = ''; box2.textContent = '';
+  const nb = $('newBox'); nb.textContent = '';
+  const hint = document.createElement('p'); hint.className = 'hint'; hint.style.margin = '0 0 8px';
+  hint.textContent = 'Fill in these and the full Damper ID is made for you. Enter just the number, not the whole ID.';
+  nb.append(hint);
+  for (let i = 0; i < FIELDS.length; i++) {
+    const f = FIELDS[i], nxt = FIELDS[i + 1];
+    if (f.half && nxt && nxt.half) {
+      const r = document.createElement('div'); r.className = 'two';
+      r.append(makeField(f), makeField(nxt)); box.append(r); i++;
+    } else (f.newOnly ? nb : f.late ? box2 : box).append(makeField(f));
+  }
+  applyKeeps();
+  applyMode();
+  placeLocPic();
+}
+let newMode = false;
+function applyMode() {
+  $('newBox').hidden = !newMode;
+  const ef = FIELDS.find((f) => f.existing), pk = $(fid(ef.key));
+  pk.disabled = newMode; pk.required = !newMode;
+  pk.parentElement.hidden = true; // the damper's name is already in the title bar
+  if (newMode) hideInfo(); else if (pk.value) showInfo(pk.value);
+}
+/* ---------- Screens: list of dampers  <->  the entry page ---------- */
+let homeScroll = 0;
+function resetForm() {
+  for (const n of PHOTOS) (pendingPhotos[n] || []).forEach((p) => URL.revokeObjectURL(p.url));
+  pendingPhotos = {}; PHOTOS.forEach(renderThumbs);
+  hideInfo(); lastFilled = {}; $('form').reset(); setTimeout(refreshChips, 0);
+  FIELDS.forEach((f) => { if (f.multi) $(fid(f.key)).dataset.sel = ''; });
+  applyKeeps();
+}
+function showScreen(detail) { const d = $('detail'); if (detail) { if (!d.open) d.showModal(); } else if (d.open) d.close(); }
+let curLabel = '';
+async function showMissing(label) {
+  const box = $('missBox'), ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key] || {};
+  const id = label && o.recs && o.recs[label];
+  if (!id) { box.hidden = true; return; }
+  const d = await loadDetail();
+  const txt = (d && d.flags && d.flags[id]) || '';
+  $('missText').textContent = txt || (d ? 'Nothing listed' : 'Not loaded yet. Tap Refresh lists while online.');
+  box.classList.toggle('none', !txt); box.hidden = false;
+}
+async function openDamper(label, force) {
+  openSet.clear();
+  const ef = FIELDS.find((f) => f.existing), el = $(fid(ef.key)), o = getOpts()[ef.key] || {};
+  homeScroll = window.scrollY;
+  const same = !force && !newMode && el.value === label;
+  newMode = false; curLabel = label;
+  if (!same) { draftKey = ''; resetForm(); el.value = label; }
+  applyMode();
+  $('dTitle').textContent = label;
+  showMissing(label); updateNav();
+  showScreen(true);
+  if (!(history.state && history.state.d)) history.pushState({ d: 1 }, '');
+  $('detailBody').scrollTop = 0;
+  if (same) return;
+  $('draftBar').style.display = 'none';
+  restoring = true;
+  await applyFill(label);
+  baseline = formState(); refreshChips();
+  const key = (o.recs && o.recs[label]) || '';
+  const had = key && await restoreDraft(key);
+  restoring = false;
+  draftKey = key;
+  $('draftBar').style.display = had ? 'flex' : 'none';
+}
+async function openNew(force) {
+  openSet.clear();
+  homeScroll = window.scrollY;
+  draftKey = ''; curLabel = '';
+  newMode = true; resetForm(); applyMode(); $('missBox').hidden = true; $('navBar').style.display = 'none';
+  $('dTitle').textContent = 'New damper';
+  showScreen(true);
+  if (!(history.state && history.state.d)) history.pushState({ d: 1 }, '');
+  $('detailBody').scrollTop = 0;
+  $('draftBar').style.display = 'none';
+  restoring = true;
+  baseline = formState();
+  const had = !force && await restoreDraft('NEW');
+  restoring = false;
+  draftKey = 'NEW';
+  $('draftBar').style.display = had ? 'flex' : 'none';
+}
+
+/* ---------- Drafts: whatever is typed or photographed is kept on the device, even if Save is not pressed ---------- */
+const DPKEY = 'https://local.invalid/draft/';
+const getDrafts = () => { try { return JSON.parse(localStorage.getItem('drafts') || '{}'); } catch { return {}; } };
+const putDrafts = (d) => { try { localStorage.setItem('drafts', JSON.stringify(d)); } catch {} };
+let draftKey = '', baseline = '', draftTimer = 0, restoring = false;
+function formState() {
+  const o = {};
+  for (const f of FIELDS) { if (f.existing) continue; const el = $(fid(f.key)); if (el) o[f.key] = [el.value, el.dataset.sel || '']; }
+  return JSON.stringify(o);
+}
+function scheduleDraft() { if (!draftKey || restoring) return; clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 400); }
+async function deleteDraft(key) {
+  const all = getDrafts(), old = all[key]; delete all[key]; putDrafts(all);
+  const c = await caches.open('intake-draft').catch(() => null);
+  if (c && old) for (const x of old.photos || []) await c.delete(DPKEY + key + '/' + x.id);
+}
+async function saveDraft() {
+  clearTimeout(draftTimer);
+  const key = draftKey; if (!key || restoring) return;
+  const photos = [];
+  for (const name of PHOTOS) for (const p of pendingPhotos[name] || []) { p.id ||= crypto.randomUUID(); photos.push({ f: name, id: p.id, p }); }
+  const cur = formState();
+  if (cur === baseline && !photos.length) { if (getDrafts()[key]) await deleteDraft(key); renderHome(); return; }
+  const c = await caches.open('intake-draft').catch(() => null);
+  const old = getDrafts()[key];
+  if (c) {
+    for (const x of photos) if (!x.p.stored) { try { await c.put(DPKEY + key + '/' + x.id, new Response(x.p.blob)); x.p.stored = true; } catch {} }
+    const keep = new Set(photos.map((x) => x.id));
+    for (const o of (old && old.photos) || []) if (!keep.has(o.id)) await c.delete(DPKEY + key + '/' + o.id);
+  }
+  const all = getDrafts();
+  all[key] = { state: JSON.parse(cur), photos: photos.map((x) => ({ f: x.f, id: x.id })), at: Date.now() };
+  putDrafts(all); renderHome();
+}
+async function restoreDraft(key) {
+  const d = getDrafts()[key]; if (!d) return false;
+  for (const [k, v] of Object.entries(d.state || {})) { const el = $(fid(k)); if (!el) continue; el.value = v[0]; if (v[1]) el.dataset.sel = v[1]; }
+  const c = await caches.open('intake-draft').catch(() => null);
+  for (const x of d.photos || []) {
+    try {
+      const r = c && await c.match(DPKEY + key + '/' + x.id); if (!r) continue;
+      const blob = await r.blob();
+      (pendingPhotos[x.f] ||= []).push({ blob, url: URL.createObjectURL(blob), id: x.id, stored: true });
+    } catch {}
+  }
+  PHOTOS.forEach(renderThumbs);
+  return true;
+}
+$('form').addEventListener('input', scheduleDraft);
+$('form').addEventListener('change', scheduleDraft);
+addEventListener('pagehide', () => { saveDraft(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) saveDraft(); });
+$('btnDiscard').onclick = async () => {
+  if (!confirm('Throw away what you typed and photographed for this damper?')) return;
+  const key = draftKey; draftKey = '';
+  if (key) await deleteDraft(key);
+  if (newMode) openNew(true); else openDamper(curLabel, true);
+  renderHome();
+};
+function goHome() { showScreen(false); }
+let navList = [];
+function updateNav() {
+  const i = navList.indexOf(curLabel), has = !newMode && i >= 0;
+  $('navBar').style.display = has ? 'flex' : 'none';
+  if (!has) return;
+  $('navPos').textContent = (i + 1) + ' / ' + navList.length;
+  $('navPrev').disabled = i <= 0; $('navNext').disabled = i >= navList.length - 1;
+}
+function navGo(d) { const i = navList.indexOf(curLabel) + d; if (i >= 0 && i < navList.length) openDamper(navList[i]); }
+function goBack() { if (history.state && history.state.d) history.back(); else goHome(); }
+addEventListener('popstate', () => { if ($('detail').open) $('detail').close(); });
+$('detail').addEventListener('close', () => { openSet.clear(); saveDraft(); newMode = false; applyMode(); if (history.state && history.state.d) history.back(); });
+$('btnBack').onclick = goBack;
+$('btnNew').onclick = () => openNew();
+
+// The list of dampers on the first screen (building and floor dropdowns, search, and a marker for entries still waiting)
+let homeSeq = 0, onlyMiss = false;
+const openSet = new Set(); // menus opened by the person; cleared whenever a damper page is opened, so they are closed again on return
+// Top-bar Sort button: off -> newest first -> oldest first -> off
+let dateSort = (() => { try { return localStorage.getItem('dsort') || ''; } catch { return ''; } })();
+function showSortLabel() { $('btnSort').textContent = dateSort === 'desc' ? 'Date ↓' : dateSort === 'asc' ? 'Date ↑' : 'Sort'; }
+showSortLabel();
+$('btnSort').onclick = () => {
+  dateSort = dateSort === '' ? 'desc' : dateSort === 'desc' ? 'asc' : '';
+  try { localStorage.setItem('dsort', dateSort); } catch {}
+  showSortLabel(); renderHome();
+};
+async function renderHome() {
+  const seq = ++homeSeq;
+  const ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key] || {}, all = [...(o.choices || [])].sort(cmpDamper), recs = o.recs || {};
+  const items = await allItems();
+  if (seq !== homeSeq) return;
+  const waiting = new Set(items.filter((i) => i.status !== 'synced' && i.recordId).map((i) => i.recordId));
+  const drafts = getDrafts();
+  const dd = await loadDetail(), fl8 = (dd && dd.flags) || {};
+  if (seq !== homeSeq) return;
+  $('btnNew').textContent = drafts.NEW ? '+ New damper (draft)' : '+ New damper';
+  const parts = (n) => {
+    const i = n.indexOf(' · '), id = i < 0 ? n : n.slice(i + 3);
+    const m = id.match(/^[^\d]*?\d*[-\s_.]+(\d+)[-\s_.]/);
+    return { b: i < 0 ? '' : n.slice(0, i), fl: m ? String(parseInt(m[1], 10)) : '' };
+  };
+  const info = all.map(parts);
+  const bl = [...new Set(info.map((x) => x.b).filter(Boolean))];
+  const bSel = $('hBld'), fSel = $('hFlr');
+  const mem = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
+  const fill = (el, first, vals, fmt, key) => { const cur = el.value || mem(key); el.textContent = ''; [['', first], ...vals.map((v) => [v, fmt ? fmt(v) : v])].forEach(([v, t]) => el.append(new Option(t, v))); el.value = vals.includes(cur) ? cur : ''; };
+  fill(bSel, 'All buildings', bl, null, 'sel_bld');
+  // the floors offered are the ones in the chosen building
+  const fl = [...new Set(info.filter((x) => !bSel.value || x.b === bSel.value).map((x) => x.fl).filter(Boolean))].sort((a, b) => a - b);
+  fill(fSel, 'All floors', fl, (v) => 'Floor ' + v, 'sel_flr');
+  bSel.style.display = bl.length ? '' : 'none'; fSel.style.display = fl.length ? '' : 'none';
+  $('hFilters').style.display = (bl.length || fl.length || true) ? 'grid' : 'none';
+  const q = $('hSearch').value.trim().toLowerCase(), bv = bSel.value, fv = fSel.value;
+  // "Missing info" only counts once somebody has started filling the damper in (one of these has a value)
+  const fillAll = (dd && dd.fill) || {};
+  // inspector dropdown: everyone who is on at least one damper
+  const insOf = (n) => { const v = (fillAll[recs[n]] || {})['Inspector(s)']; return Array.isArray(v) ? v : v ? [v] : []; };
+  const insNames = [...new Set(all.flatMap(insOf))].sort((a, b) => a.localeCompare(b));
+  const iSel = $('hIns');
+  { const cur = iSel.value; iSel.textContent = ''; iSel.append(new Option('All inspectors', '')); insNames.forEach((v) => iSel.append(new Option(v, v))); if (insNames.length) iSel.append(new Option('No inspector yet', '__none')); iSel.value = [...insNames, '__none'].includes(cur) ? cur : ''; }
+  iSel.style.display = insNames.length ? '' : 'none';
+  $('hFilters').style.display = (bl.length > 1 || fl.length > 1 || insNames.length || all.length) ? 'grid' : 'none';
+  const iv = iSel.value;
+  const STARTED = ['Inspector(s)', 'Inspection Date', 'Inspection Field Notes', 'Operational Test', 'Inspection Note - Select', 'Suggested Follow-up', 'Special Conditions - Inspections'];
+  // a photo in any of the photo boxes (not Location Pic) also counts as started
+  const picCols = PHOTOS.filter((n) => n !== LOC_PIC).map((n) => norm(getNames()[n] || n));
+  const picsAll = (dd && dd.pics) || {};
+  const hasPhoto = (rid) => { const pr = picsAll[rid]; return !!pr && Object.keys(pr).some((k) => picCols.includes(norm(k)) && pr[k].length); };
+  const NOFLAG = /remove from inventory|accidental entry delete/i;
+  const flagged = (n) => { const rid = recs[n]; return !!(fl8[rid] && !NOFLAG.test(String((fillAll[rid] || {})['Operational Test'] || '')) && (STARTED.some((k) => fillAll[rid] && fillAll[rid][k]) || hasPhoto(rid))); };
+  const inScope = (n, i) => (!q || n.toLowerCase().includes(q)) && (!bv || info[i].b === bv) && (!fv || info[i].fl === fv) && (!iv || (iv === '__none' ? !insOf(n).length : insOf(n).includes(iv)));
+  const nMiss = all.filter((n, i) => inScope(n, i) && flagged(n)).length;
+  if (!nMiss) onlyMiss = false;
+  $('hMiss').hidden = !nMiss; $('hMiss').textContent = '';
+  if (onlyMiss) $('hMiss').append('✕ Showing only the ' + nMiss + ' with missing/incomplete info. Tap to show all.');
+  else { const w = document.createElement('span'); w.className = 'rdot'; $('hMiss').append(w, nMiss + ' with missing/incomplete info. Tap to show only those.'); }
+  const hits = all.filter((n, i) => (!onlyMiss || flagged(n)) && inScope(n, i));
+  const list = $('dlist'); list.textContent = '';
+  const opOf0 = (n) => ((fillAll[recs[n]] || {})['Operational Test']) || '';
+  const dateOf = (n) => String((fillAll[recs[n]] || {})['Inspection Date'] || '').slice(0, 10);
+  const row = (n) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'pkitem';
+    const t = document.createElement('span');
+    if (flagged(n)) { const w = document.createElement('span'); w.className = 'rdot'; t.append(w); }
+    t.append(n); b.append(t);
+    if (drafts[recs[n]] && !waiting.has(recs[n])) { const m = document.createElement('span'); m.className = 'pend'; m.style.color = 'var(--brand)'; m.textContent = '● draft'; b.append(m); }
+    if (waiting.has(recs[n])) { const m = document.createElement('span'); m.className = 'pend'; m.textContent = '● waiting to sync'; b.append(m); }
+    b.onclick = () => openDamper(n);
+    if (dateSort) { const dt = dateOf(n); const m = document.createElement('span'); m.className = 'pend'; m.style.color = 'var(--muted)'; m.style.fontWeight = '500'; m.textContent = dt || 'no date'; b.insertBefore(m, b.children[1] || null); }
+    return b;
+  };
+  if (dateSort) { // one flat list ordered by Inspection Date (dampers with no date go last)
+    const d2 = document.createElement('div');
+    const sorted = [...hits].sort((a, c) => {
+      const x = dateOf(a), y = dateOf(c);
+      if (!x !== !y) return x ? -1 : 1;
+      return (x === y ? 0 : (x < y ? -1 : 1) * (dateSort === 'asc' ? 1 : -1)) || cmpDamper(a, c);
+    });
+    navList = sorted;
+    sorted.forEach((n) => d2.append(row(n)));
+    list.append(d2);
+    $('hCount').textContent = all.length ? hits.length + ' of ' + all.length + ' dampers, by inspection date (' + (dateSort === 'asc' ? 'oldest first' : 'newest first') + ')' : 'No dampers loaded yet. Tap Refresh lists.';
+    return;
+  }
+  if ($('hView').value === 'all') { // one plain list, building / floor / number order, with each damper's status beside it
+    const d3 = document.createElement('div'); navList = hits;
+    hits.forEach((n) => {
+      const b = row(n), st = ((fillAll[recs[n]] || {})['Operational Test']) || '';
+      if (st) { const m = document.createElement('span'); m.className = 'pend'; m.style.color = 'var(--muted)'; m.style.fontWeight = '500'; m.textContent = ''; m.append(chipEl(st)); b.insertBefore(m, b.children[1] || null); }
+      d3.append(b);
+    });
+    list.append(d3);
+    $('hCount').textContent = all.length ? hits.length + ' of ' + all.length + ' dampers' : 'No dampers loaded yet. Tap Refresh lists.';
+    return;
+  }
+  // Groups: flagged dampers first, then one group per Operational Test result (the choices in Airtable's order), then untested
+  const opOf = (n) => ((fillAll[recs[n]] || {})['Operational Test']) || '';
+  const groups = [];
+  const rest = hits;
+  const opChoices = ((getOpts()['Operational Test'] || {}).choices) || [];
+  const seen = [...new Set(all.map(opOf))].filter(Boolean); // every result used on any damper, even if none match the filters right now
+  const order = [...opChoices.filter((c) => seen.includes(c)), ...seen.filter((c) => !opChoices.includes(c)).sort(), ...(all.some((n) => !opOf(n)) ? [''] : [])];
+  navList = order.flatMap((v) => rest.filter((n) => opOf(n) === v));
+  groups.push({ key: 'all', label: 'All Dampers', items: rest });
+  for (const v of order) groups.push({ key: 'op:' + v, label: v || 'No Operational Test yet', op: v || 'No Operational Test yet', noop: !v, items: rest.filter((n) => opOf(n) === v) });
+  const searching = !!q; // typing in the search box opens every menu so the matches are visible
+  for (const g of groups) {
+    const d = document.createElement('details'); d.className = 'grp';
+    d.open = searching || openSet.has(g.key);
+    const sm = document.createElement('summary');
+    const l = document.createElement('span'); if (g.warn) { const w = document.createElement('span'); w.className = 'rdot'; l.append(w); } if (g.op) { l.append(chipEl(g.op)); } else l.append(g.label);
+    const c = document.createElement('span'); c.className = 'cnt'; c.textContent = g.items.length;
+    sm.append(l, c); d.append(sm);
+    g.items.forEach((n) => d.append(row(n)));
+    d.addEventListener('toggle', () => {
+      if (searching) return;
+      if (d.open) openSet.add(g.key); else openSet.delete(g.key);
+    });
+    list.append(d);
+  }
+  $('hCount').textContent = all.length ? hits.length + ' of ' + all.length + ' dampers' : 'No dampers loaded yet. Tap Refresh lists.';
+}
+$('hMiss').onclick = () => { onlyMiss = !onlyMiss; renderHome(); };
+$('hIns').onchange = () => renderHome(); $('hBld').onchange = () => { try { localStorage.setItem('sel_bld', $('hBld').value); localStorage.setItem('sel_flr', ''); } catch {} $('hFlr').value = ''; renderHome(); };
+$('navPrev').onclick = () => navGo(-1); $('navNext').onclick = () => navGo(1);
+$('hView').onchange = () => { try { localStorage.setItem('sel_view', $('hView').value); } catch {} renderHome(); };
+try { $('hView').value = localStorage.getItem('sel_view') || 'status'; } catch {}
+$('hFlr').onchange = () => { try { localStorage.setItem('sel_flr', $('hFlr').value); } catch {} renderHome(); }; $('hSearch').oninput = () => renderHome();
+function buildPhotos() {
+  const pb = $('photoBlocks'); pb.textContent = '';
+  for (const name of PHOTOS) {
+    const blk = document.createElement('div'); blk.className = 'pblock';
+    const head = document.createElement('div'); head.className = 'ph';
+    const b = document.createElement('b'); b.textContent = name;
+    // two ways to add a photo: take one with the camera, or upload an existing one
+    const cam = document.createElement('input'); cam.type = 'file'; cam.accept = 'image/*'; cam.setAttribute('capture', 'environment'); cam.id = 'c_' + fid(name);
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true; inp.id = 'p_' + fid(name);
+    const mk = (input, text) => { const l = document.createElement('label'); l.className = 'addbtn'; l.htmlFor = input.id; l.textContent = text; l.style.margin = '0'; return l; };
+    const btns = document.createElement('div'); btns.className = 'pbtns';
+    btns.append(mk(cam, '📷 Take photo'), mk(inp, '⬆ Upload file'), cam, inp);
+    head.append(b);
+    const th = document.createElement('div'); th.className = 'thumbs'; th.id = 't_' + fid(name);
+    const ex = document.createElement('div'); ex.id = 'ex_' + fid(name); ex.hidden = true;
+    blk.id = 'pb_' + fid(name);
+    blk.append(head, btns, ex, th); pb.append(blk);
+    const onPick = async (e) => {
+      for (const file of e.target.files) {
+        try {
+          const blob = await shrink(file);
+          (pendingPhotos[name] ||= []).push({ blob, url: URL.createObjectURL(blob) });
+        } catch { toast('Could not read a photo'); }
+      }
+      e.target.value = ''; renderThumbs(name); scheduleDraft();
+    };
+    cam.addEventListener('change', onPick); inp.addEventListener('change', onPick);
+  }
+  placeLocPic();
+}
+const LOC_PIC = 'Location Pic';
+function placeLocPic() {
+  const blk = $('pb_' + fid(LOC_PIC)), dt = $(fid('Inspection Date'));
+  if (blk && dt && dt.parentElement) dt.parentElement.before(blk);
+}
+function applyKeeps() {
+  const k = keeps();
+  for (const f of FIELDS) {
+    if (!f.keep) continue;
+    const el = $(fid(f.key));
+    el.value = f.type === 'date' ? (k[f.key] || today()) : (k[f.key] || '');
+    if (f.multi) el.dataset.sel = k[f.key + '#sel'] || '';
+  }
+}
+
+// tap any photo to see it full size
+(function () {
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;padding:12px';
+  const im = document.createElement('img'); im.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain';
+  const x = document.createElement('button'); x.type = 'button'; x.textContent = '✕ Close'; x.style.cssText = 'position:absolute;top:max(12px,env(safe-area-inset-top));right:12px;background:#fff;color:#000;border:0;border-radius:99px;padding:8px 14px;font-weight:600';
+  ov.append(im, x); document.body.append(ov);
+  const hide = () => { ov.style.display = 'none'; im.removeAttribute('src'); };
+  ov.onclick = hide;
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    if (t.tagName !== 'IMG' || ov.contains(t) || !t.closest('#photoBlocks, .pblock, #detailBody')) return;
+    if (!t.src) return; e.preventDefault(); im.src = t.dataset.full || t.src; ov.style.display = 'flex';
+  });
+})();
+let pendingPhotos = {}; // { fieldName: [{blob, url}] }
+function renderThumbs(name) {
+  const t = $('t_' + fid(name)); t.textContent = '';
+  (pendingPhotos[name] || []).forEach((p, i) => {
+    const d = document.createElement('div'); d.className = 'thumb';
+    const im = document.createElement('img'); im.src = p.url;
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = '×';
+    b.onclick = () => { URL.revokeObjectURL(p.url); pendingPhotos[name].splice(i, 1); renderThumbs(name); scheduleDraft(); };
+    d.append(im, b); t.append(d);
+  });
+}
+async function shrink(file) {
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const k = Math.min(1, MAX_DIM / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close && bmp.close();
+  return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('encode'))), 'image/jpeg', JPEG_Q));
+}
+
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fields = {}, vals = {}, k = {};
+  let pickedId = '';
+  for (const f of FIELDS) {
+    if ((f.newOnly && !newMode) || (f.existing && newMode)) continue;
+    if (f.multi) {
+      let picks = []; try { picks = JSON.parse($(fid(f.key)).dataset.sel || '[]'); } catch {}
+      const o = getOpts()[f.key] || {};
+      if (f.keep) { k[f.key] = $(fid(f.key)).value; k[f.key + '#sel'] = $(fid(f.key)).dataset.sel || ''; }
+      if (picks.length) {
+        const who = (n) => { const pp = (o.people && o.people[n]) || {}; return pp.id ? { id: pp.id } : { email: pp.email || n }; };
+        if (/Collaborator/.test(o.type || '')) fields[colOf(f.key)] = o.type === 'multipleCollaborators' ? picks.map(who) : who(picks[0]);
+        else if (o.type === 'multipleRecordLinks') fields[colOf(f.key)] = picks.map((n) => o.recs && o.recs[n]).filter(Boolean);
+        else if (o.type === 'multipleSelects') fields[colOf(f.key)] = picks;
+        else fields[colOf(f.key)] = picks[0];
+      }
+      continue;
+    }
+    const v = $(fid(f.key)).value.trim();
+    if (f.keep) k[f.key] = v;
+    vals[f.key] = v;
+    if (f.existing) { pickedId = v; continue; } // the full damper ID is built by Airtable: only ever read, never written
+    if (v === '') continue;
+    let val = f.type === 'number' ? Number(v) : v;
+    const o = f.type === 'select' && getOpts()[f.key];
+    if (o && o.type === 'multipleSelects') val = [v];
+    else if (o && /Collaborator/.test(o.type)) {
+      const pp = (o.people && o.people[v]) || {};
+      const who = pp.id ? { id: pp.id } : { email: pp.email || v };
+      val = o.type === 'multipleCollaborators' ? [who] : who;
+    }
+    fields[colOf(f.key)] = val;
+  }
+  let presetId = null, label = '';
+  const ef = FIELDS.find((f) => f.existing);
+  if (newMode) {
+    const num = vals['Damper ID #'] || '';
+    if (!num) { toast('Enter the damper number'); return; }
+    if (/[-\s]/.test(num)) { toast('Enter just the number (for example 011), not the whole ID. Pick the type and floor above.'); return; }
+    label = [vals['Damper type'], vals['Floor'], num].filter(Boolean).join('-');
+  } else {
+    const o = getOpts()[ef.key];
+    if (!o || !o.recs || !Object.keys(o.recs).length) { toast('Damper list not loaded yet. Tap Refresh lists at the top, or add a new damper.'); return; }
+    presetId = o.recs[pickedId];
+    if (!presetId) { toast('Pick a Damper ID from the list'); return; }
+    label = pickedId;
+  }
+  localStorage.setItem('keeps', JSON.stringify(k));
+  const photos = [];
+  for (const name of PHOTOS) {
+    (pendingPhotos[name] || []).forEach((p, i) =>
+      photos.push({ field: colOf(name), name: `${name.replace(/\W+/g, '_')}_${i + 1}.jpg`, blob: p.blob, done: false }));
+  }
+  if (!photos.length && !Object.keys(fields).length) { toast('Add a photo or some notes first'); return; }
+  const item = {
+    id: crypto.randomUUID(), createdAt: Date.now(), label, fields, photos,
+    recordId: presetId, preset: !!presetId, status: 'pending', error: '',
+  };
+  try { await putItem(item); }
+  catch { toast('Could not save: phone storage may be full. Sync or free up space.'); return; }
+  { const dk = draftKey; draftKey = ''; clearTimeout(draftTimer); if (dk) await deleteDraft(dk); }
+  for (const name of PHOTOS) { (pendingPhotos[name] || []).forEach((p) => URL.revokeObjectURL(p.url)); }
+  pendingPhotos = {}; PHOTOS.forEach(renderThumbs);
+  hideInfo(); lastFilled = {}; $('form').reset(); FIELDS.forEach((f) => { if (f.multi) $(fid(f.key)).dataset.sel = ''; }); applyKeeps();
+  goBack();
+  setTimeout(() => toast('Saved ✓ It will send by itself when there is signal.'), 400);
+  await render();
+  sync();
+});
+
+/* ---------- Sync ---------- */
+let syncing = false;
+async function api(url, body, method) {
+  const c = cfg();
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  try {
+    const r = await fetch(url, {
+      method: method || 'POST', signal: ctl.signal,
+      headers: { Authorization: 'Bearer ' + c.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      let m = r.status + ''; try { m += ' ' + (await r.json()).error.message; } catch {}
+      const e = new Error(m); e.status = r.status; throw e;
+    }
+    return r.json();
+  } finally { clearTimeout(timer); }
+}
+const b64 = (blob) => new Promise((res, rej) => {
+  const fr = new FileReader();
+  fr.onload = () => res(String(fr.result).split(',')[1]);
+  fr.onerror = () => rej(fr.error);
+  fr.readAsDataURL(blob);
+});
+
+async function sync(manual) {
+  const c = cfg();
+  if (syncing) return;
+  if (!c.token || !c.base || !c.table) { if (manual) { toast('Add your Airtable settings first'); openSettings(); } return; }
+  if (!navigator.onLine) { if (manual) toast('No connection. Entries are safe on this device.'); return; }
+  syncing = true; $('btnSync').disabled = true;
+  let createdAny = false;
+  try {
+    const items = (await allItems()).filter((i) => i.status !== 'synced').reverse();
+    for (const it of items) {
+      try {
+        // 1) create the record once; remember its id so a retry never duplicates it
+        if (!it.recordId) {
+          const res = await api(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}`,
+            { fields: (({ [FIELDS.find((f) => f.existing).key]: _, ...rest }) => rest)(it.fields), typecast: true });
+          it.recordId = res.id; createdAny = true; await putItem(it);
+        } else if (it.preset && !it.patched) {
+          // existing damper: fill in its row instead of creating a new one
+          const body = { ...it.fields }; delete body[FIELDS.find((f) => f.existing).key];
+          if (Object.keys(body).length) {
+            await api(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}/${it.recordId}`,
+              { fields: body, typecast: true }, 'PATCH');
+          }
+          it.patched = true; await putItem(it);
+        }
+        // 2) upload each photo that is not done yet, into its own attachment field
+        for (const p of it.photos) {
+          if (p.done) continue;
+          await api(`https://content.airtable.com/v0/${c.base}/${it.recordId}/${encodeURIComponent(p.field)}/uploadAttachment`,
+            { contentType: 'image/jpeg', filename: p.name, file: await b64(p.blob) });
+          p.done = true; await putItem(it);
+        }
+        it.status = 'synced'; it.error = ''; it.errCode = 0;
+        it.photos.forEach((p) => (p.blob = null)); // free space
+        await putItem(it);
+      } catch (err) {
+        it.status = 'error'; it.error = err.name === 'AbortError' ? 'Timed out, will retry' : err.message; it.errCode = err.status || 0;
+        await putItem(it);
+        if (!navigator.onLine || err.name === 'AbortError' || err instanceof TypeError) break; // connection trouble: stop, retry later
+        if (err.status === 401 || err.status === 403) { toast('Airtable refused the token. Check Settings.'); break; }
+      }
+      await render();
+    }
+  } finally {
+    syncing = false; $('btnSync').disabled = false; await render(); updateMsgDot();
+    if (createdAny) refreshOptions(); // so a newly added damper shows up in the list
+    const left = (await allItems()).filter((i) => i.status !== 'synced').length;
+    if (manual) toast(left ? left + ' still waiting' : 'All synced');
+  }
+}
+
+/* ---------- List ---------- */
+async function render() {
+  const items = await allItems();
+  $('savedCard').hidden = !items.length;
+  renderHome(); updateMsgDot();
+  const waiting = items.filter((i) => i.status !== 'synced').length;
+  const nSynced = items.length - waiting;
+  $('count').textContent = (waiting ? waiting + ' waiting to sync' : 'All synced') + (nSynced && waiting ? ' · ' + nSynced + ' synced' : nSynced ? ' (' + nSynced + ')' : '');
+  $('btnSync').hidden = !waiting;
+  const list = $('list'); list.textContent = '';
+  if (!items.length) { list.textContent = 'Nothing saved yet.'; return; }
+  for (const it of items) {
+    const row = document.createElement('div'); row.className = 'item';
+    const t = document.createElement('div'); t.className = 't';
+    const title = document.createElement('b');
+    const note = String(it.label || it.fields[FIELDS[0].key] || '').replace(/\s+/g, ' ');
+    title.textContent = note ? (note.length > 40 ? note.slice(0, 40) + '…' : note) : '(no ID)';
+    const sub = document.createElement('span');
+    const done = it.photos.filter((p) => p.done).length;
+    sub.textContent = new Date(it.createdAt).toLocaleString() + ` · ${done}/${it.photos.length} photos` + (it.error ? ' · ' + it.error : '');
+    t.append(title, sub);
+    if (it.recordId) {
+      const c = cfg(), rid = document.createElement('span');
+      rid.style.display = 'block';
+      const tid = /^tbl/.test(c.table) ? c.table : localStorage.getItem('tid');
+      if (tid) {
+        const a = document.createElement('a');
+        a.href = `https://airtable.com/${c.base}/${tid}/${it.recordId}`;
+        a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Open in Airtable';
+        a.style.color = 'var(--brand)'; rid.append(a);
+      } else rid.textContent = 'Airtable record ' + it.recordId;
+      t.append(rid);
+    }
+    const badge = document.createElement('span');
+    badge.className = 'badge ' + it.status; badge.textContent = it.status === 'synced' ? 'synced' : it.status === 'error' ? 'retry' : 'waiting';
+    row.append(t, badge);
+    if (it.status !== 'synced') {
+      const x = document.createElement('button'); x.className = 'small secondary'; x.textContent = 'Delete';
+      x.onclick = async () => { if (confirm('Delete this entry from the device? If it is not synced it will be lost.')) { await delItem(it.id); render(); } };
+      row.append(x);
+    }
+    list.append(row);
+  }
+}
+$('btnSync').onclick = () => sync(true);
+$('btnClear').onclick = async () => { for (const i of await allItems()) if (i.status === 'synced') await delItem(i.id); render(); };
+
+/* ---------- Settings ---------- */
+const getSchema = () => { try { return JSON.parse(localStorage.getItem('schema') || '[]'); } catch { return []; } };
+function saveSchema(tables) {
+  localStorage.setItem('schema', JSON.stringify(tables.map((t) => ({ id: t.id, name: t.name, views: (t.views || []).map((v) => ({ id: v.id, name: v.name })), fields: (t.fields || []).map((x) => x.name) }))));
+}
+async function loadSchema() {
+  const tok = $('sTok').value.trim(), base = $('sBase').value.trim();
+  if (!tok || !navigator.onLine) return false;
+  try {
+    const r = await fetch(`https://api.airtable.com/v0/meta/bases/${base}/tables`, { headers: { Authorization: 'Bearer ' + tok } });
+    if (!r.ok) return r.status;
+    saveSchema((await r.json()).tables); return true;
+  } catch { return false; }
+}
+const findTable = (key) => { const k = key.trim().toLowerCase(); return getSchema().find((t) => t.id === key.trim() || t.name.toLowerCase() === k); };
+function viewsFor(t) {
+  if (!t) return [];
+  const only = TECH_VIEWS.map((n) => n.toLowerCase());
+  return only.length ? t.views.filter((v) => only.includes(v.name.toLowerCase())) : t.views;
+}
+function fillIdSelect(keep) {
+  const sel = $('sIdField'), want = keep !== undefined ? keep : sel.value;
+  sel.textContent = '';
+  sel.append(new Option('Automatic (Damper ID or Damper IDs)', ''));
+  const t = findTable($('sTable').value);
+  const list = t && t.fields ? t.fields.slice() : [];
+  if (want && !list.includes(want)) list.push(want);
+  list.forEach((n) => sel.append(new Option(n, n)));
+  sel.value = want || '';
+}
+function fillViewSelect(keep) {
+  const sel = $('sView'), want = keep !== undefined ? keep : sel.value;
+  sel.textContent = '';
+  sel.append(new Option('All dampers in this table', ''));
+  const t = findTable($('sTable').value);
+  const list = viewsFor(t).map((v) => v.name);
+  if (want && !list.includes(want)) list.push(want); // keep a saved choice even if the list could not load
+  list.forEach((n) => sel.append(new Option(n, n)));
+  sel.value = want || '';
+}
+function fillMainView() {
+  const sel = $('mView'), c = cfg(), want = c.view || '';
+  const t = findTable(c.table || '');
+  const list = viewsFor(t).map((v) => v.name);
+  if (want && !list.includes(want)) list.push(want);
+  sel.textContent = '';
+  sel.append(new Option('All dampers in this table', ''));
+  list.forEach((n) => sel.append(new Option(n, n)));
+  sel.value = want;
+}
+$('mView').onchange = () => {
+  const c = cfg();
+  saveCfg({ ...c, view: $('mView').value });
+  refreshOptions(true);
+};
+function openSettings() {
+  const c = cfg();
+  $('sTok').value = c.token || ''; $('sBase').value = c.base || ''; $('sTable').value = c.table || ''; 
+  $('sVer').textContent = 'App version ' + APP_VERSION;
+  $('sTablesOut').hidden = true; $('sTables').textContent = 'Show tables';
+  fillViewSelect(c.view || '');
+  $('dlg').showModal();
+  loadSchema().then((ok) => { if (ok === true) { fillViewSelect(); } });
+}
+$('btnSettings').onclick = openSettings;
+$('sCancel').onclick = () => $('dlg').close();
+$('sTable').addEventListener('change', () => { fillViewSelect(''); fillIdSelect(''); });
+$('sTables').onclick = async () => {
+  const out = $('sTablesOut'), btn = $('sTables');
+  if (!out.hidden) { out.hidden = true; btn.textContent = 'Show tables'; return; } // second tap hides it again
+  out.hidden = false; btn.textContent = 'Hide tables';
+  if (!$('sTok').value.trim()) { out.textContent = 'Paste the token first.'; return; }
+  out.textContent = 'Loading…';
+  const ok = await loadSchema();
+  if (ok !== true) {
+    out.textContent = ok ? 'Could not read the base (error ' + ok + '). The token needs schema.bases:read and access to this base.' : getSchema().length ? '' : 'Could not reach Airtable. Check your connection.';
+    if (!getSchema().length) return;
+  }
+  const cur = findTable($('sTable').value), curView = $('sView').value;
+  out.textContent = '';
+  const intro = document.createElement('p'); intro.className = 'hint'; intro.style.margin = '0 0 4px';
+  intro.textContent = 'Tap a table to use it, or tap one of its views.'; out.append(intro);
+  for (const t of getSchema()) {
+    const card = document.createElement('div'); card.className = 'tcard';
+    const nb = document.createElement('button'); nb.type = 'button'; nb.className = 'tname' + (cur && cur.id === t.id && !curView ? ' on' : '');
+    nb.textContent = t.name;
+    nb.onclick = () => { $('sTable').value = t.name; fillViewSelect(''); $('sTables').click(); };
+    card.append(nb);
+    const vs = viewsFor(t);
+    if (vs.length) {
+      const chips = document.createElement('div'); chips.className = 'chips';
+      for (const v of vs) {
+        const c = document.createElement('button'); c.type = 'button'; c.className = 'chip' + (cur && cur.id === t.id && curView === v.name ? ' on' : '');
+        c.textContent = v.name;
+        c.onclick = () => { $('sTable').value = t.name; fillViewSelect(v.name); $('sTables').click(); };
+        chips.append(c);
+      }
+      card.append(chips);
+    }
+    out.append(card);
+  }
+};
+$('btnLists').onclick = () => refreshOptions(true);
+$('sShow').onclick = () => {
+  const t = $('sTok'); const show = t.type === 'password';
+  t.type = show ? 'text' : 'password'; $('sShow').textContent = show ? 'Hide token' : 'Show token';
+};
+$('sTest').onclick = async () => {
+  const tok = $('sTok').value.trim(), out = $('sResult');
+  if (!tok) { out.textContent = 'Paste the token first.'; return; }
+  const shape = `Length ${tok.length} (a normal Airtable token is 82), ${tok.startsWith('pat') ? 'starts with "pat"' : 'does NOT start with "pat"'}. `;
+  out.textContent = 'Checking…';
+  try {
+    const r = await fetch('https://api.airtable.com/v0/meta/whoami', { headers: { Authorization: 'Bearer ' + tok } });
+    if (r.ok) out.textContent = shape + 'Airtable accepts this token.';
+    else if (r.status === 401) out.textContent = shape + 'Airtable says this token is not valid. Re-copy it from the developer hub, or create a new one.';
+    else out.textContent = shape + 'Airtable replied with status ' + r.status + '.';
+  } catch { out.textContent = shape + 'Could not reach Airtable. Check your connection.'; }
+};
+$('setForm').addEventListener('submit', () => {
+  saveCfg({ token: $('sTok').value.trim(), base: $('sBase').value.trim(), table: $('sTable').value.trim(), view: $('sView').value.trim(), idField: '' });
+  toast('Settings saved'); fillMainView(); sync(); refreshOptions();
+});
+
+/* ---------- Misc ---------- */
+// Short notes: shown inside the page you are on (above Save in the entry page, otherwise under the buttons)
+function toast(m) {
+  const inEntry = $('detail').open, el = inEntry ? $('formMsg') : $('hMsg');
+  el.textContent = m; el.hidden = false;
+  if (!inEntry) el.style.color = /could not|refused|no connection|needs|add your|still/i.test(m) ? '#d92d20' : 'var(--ok)';
+  clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, inEntry ? 6000 : 4000);
+}
+// Messages = problems that are still unresolved and need a change to the program. Fixed ones disappear by themselves.
+const getJ = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } };
+function setErr(k, v) { try { if (v) localStorage.setItem(k, JSON.stringify(v)); else localStorage.removeItem(k); } catch {} }
+async function collectErrors() {
+  const out = [];
+  for (const it of await allItems()) {
+    if (it.status === 'error' && it.errCode) out.push({ t: it.createdAt, title: 'Entry not sent: ' + String(it.label || '(no ID)').slice(0, 40), code: it.errCode, text: String(it.error || '').replace(/^\d+\s*/, '') });
+  }
+  const r = getJ('err_refresh'); if (r) out.push({ t: r.t, title: 'Lists could not be updated', code: r.code, text: r.text });
+  const ph = getJ('err_photos'); if (ph) out.push({ t: ph.t, title: 'Photos could not be saved for offline', code: ph.code, text: ph.text });
+  return out;
+}
+async function updateMsgDot() { try { $('msgDot').hidden = !(await collectErrors()).length; } catch {} }
+async function showMsgs() {
+  const box = $('msgList'); box.textContent = '';
+  const list = await collectErrors();
+  if (!list.length) { box.textContent = 'Nothing to report. Everything is working.'; $('msgCopy').hidden = true; }
+  else $('msgCopy').hidden = false;
+  for (const x of list) {
+    const d = document.createElement('div'); d.style.cssText = 'padding:10px 0;border-bottom:1px solid var(--line)';
+    const h = document.createElement('div'); h.style.fontWeight = '700'; h.textContent = x.title;
+    const c = document.createElement('div'); c.style.color = '#d92d20'; c.style.fontWeight = '700'; c.textContent = 'Code: ' + (x.code || 'none');
+    const m = document.createElement('div'); m.textContent = x.text || '';
+    const t = document.createElement('div'); t.className = 'hint'; t.style.margin = '2px 0 0'; t.textContent = new Date(x.t).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    d.append(h, c, m, t); box.append(d);
+  }
+  box.dataset.copy = list.map((x) => `${x.title}\nCode: ${x.code || 'none'}\n${x.text || ''}`).join('\n\n') + (list.length ? '\n\nApp version ' + APP_VERSION : '');
+  $('msgDlg').showModal();
+}
+$('msgCopy').onclick = async () => {
+  const txt = $('msgList').dataset.copy || '';
+  try { await navigator.clipboard.writeText(txt); } catch { const ta = document.createElement('textarea'); ta.value = txt; document.body.append(ta); ta.select(); try { document.execCommand('copy'); } catch {} ta.remove(); }
+  $('msgCopy').textContent = 'Copied ✓'; setTimeout(() => { $('msgCopy').textContent = 'Copy for Avery'; }, 2000);
+};
+$('btnMsgs').onclick = showMsgs;
+$('btnHelp').onclick = () => $('helpDlg').showModal();
+$('helpClose').onclick = () => $('helpDlg').close();
+$('msgClose').onclick = () => $('msgDlg').close();
+function netState() { const on = navigator.onLine; $('net').textContent = on ? 'Online' : 'Offline'; document.querySelector('header').classList.toggle('off', !on); }
+addEventListener('online', () => { netState(); sync(); refreshOptions(); });
+addEventListener('offline', netState);
+
+try { const c0 = JSON.parse(localStorage.getItem('cfg') || '{}'); if (c0.view) { c0.view = ''; localStorage.setItem('cfg', JSON.stringify(c0)); localStorage.removeItem('opts'); } } catch {}
+updateMsgDot(); buildFields(); buildPhotos(); netState(); render(); fillMainView(); renderHome(); sync(); refreshOptions();
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
