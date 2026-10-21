@@ -605,7 +605,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-21-m';
+const APP_VERSION = '2026-10-21-n';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1162,11 +1162,14 @@ function renderGrid(list, groups, ctx) {
   const colIx = {}; for (const k of (dd && dd.order) || []) colIx[norm(k)] = k;
   const picKey = {}; // photo column -> real column name
   for (const p of PHOTOS) picKey[p] = norm(getNames()[p] || p);
+  const rev = {}; // linked-record ids -> the names people see (Inspection Note - Select, Suggested Follow-up…)
+  for (const o of Object.values(getOpts() || {})) if (o && o.type === 'multipleRecordLinks' && o.recs) for (const [nm, id] of Object.entries(o.recs)) rev[id] = nm;
+  const names2 = (v) => String(v).split(/,\s*/).map((t) => rev[t.trim()] || t).join(', ');
   const val = (rid, name) => {
     const rec = ((dd && dd.recs) || {})[rid] || {}, k = colIx[norm(name)];
     let v = k ? rec[k] : '';
     if (!v) { const f = (fillAll[rid] || {})[name]; v = Array.isArray(f) ? f.join(', ') : f || ''; }
-    return v || '';
+    return v ? names2(v) : '';
   };
   const wrap = document.createElement('div'); wrap.className = 'gridwrap';
   const inner = document.createElement('div'); inner.className = 'gridin'; inner.style.width = total + 'px';
