@@ -621,7 +621,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-27-a';
+const APP_VERSION = '2026-10-27-b';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1847,12 +1847,15 @@ function fillMainView() {
   list.forEach((n) => sel.append(new Option(n, n)));
   sel.value = want;
 }
+// Table picker at the top of the main page: only tables whose name starts with "Tech View", plus these
+const MAIN_TABLES = ['AVERY APP TESTING'];
 // Table picker at the top of the main page (the tables come from the base's saved list)
 function fillMainTable() {
   const sel = $('mTable'), c = cfg(), cur = findTable(c.table || '');
-  const tables = getSchema();
+  const tables = getSchema().filter((t) => /^\s*tech\s*view/i.test(t.name) || MAIN_TABLES.some((n) => n.toLowerCase() === t.name.trim().toLowerCase()));
   sel.textContent = '';
   for (const t of tables) sel.append(new Option(t.name, t.name));
+  if (cur && !tables.some((t) => t.id === cur.id)) sel.append(new Option(cur.name, cur.name)); // keep the table in use even if it is not in the list
   if (!cur) sel.append(new Option(c.table || 'Tap Refresh lists to load tables', c.table || ''));
   sel.value = cur ? cur.name : (c.table || '');
 }
