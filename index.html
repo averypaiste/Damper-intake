@@ -392,7 +392,10 @@ function saveCfg(next) {
     buildFields();
   }
 }
-const keeps = () => JSON.parse(localStorage.getItem('keeps') || '{}');
+const keeps = () => { try { return JSON.parse(localStorage.getItem('keeps') || '{}'); } catch { return {}; } };
+// The inspector and date used first each day fill in every damper that day (they can still be changed per damper).
+// On a new day the date starts at today again; the inspector carries over.
+const keepVals = () => { const k = keeps(); if (k.__day !== today()) for (const f of FIELDS) if (f.keep && f.type === 'date') delete k[f.key]; return k; };
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 /* ---------- IndexedDB ---------- */
@@ -487,7 +490,7 @@ async function applyFill(label) {
   const d = await loadDetail();
   const mine = (d && d.fill && recId && d.fill[recId]) || {};
   // undo what the previous damper filled in (only if the tech did not change it since)
-  for (const [k, v] of Object.entries(lastFilled)) { const f = FIELDS.find((x) => x.key === k), el = f && $(fid(k)); if (el && el.value === v) { el.value = f.keep ? (keeps()[k] || (f.type === 'date' ? today() : '')) : ''; if (f.multi) el.dataset.sel = ''; } }
+  for (const [k, v] of Object.entries(lastFilled)) { const f = FIELDS.find((x) => x.key === k), el = f && $(fid(k)); if (el && el.value === v) { const kk = keepVals(); el.value = f.keep ? (kk[k] || (f.type === 'date' ? today() : '')) : ''; if (f.multi) el.dataset.sel = f.keep ? (kk[k + '#sel'] || '') : ''; } }
   lastFilled = {};
   for (const f of FIELDS) {
     if (f.existing || f.newOnly) continue;
@@ -621,7 +624,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-27-d';
+const APP_VERSION = '2026-10-27-e';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1548,7 +1551,7 @@ function placeLocPic() {
   if (blk && dt && dt.parentElement) dt.parentElement.before(blk);
 }
 function applyKeeps() {
-  const k = keeps();
+  const k = keepVals();
   for (const f of FIELDS) {
     if (!f.keep) continue;
     const el = $(fid(f.key));
@@ -1601,6 +1604,7 @@ $('form').addEventListener('submit', async (e) => {
     if ((f.newOnly && !newMode) || (f.existing && newMode)) continue;
     if (f.multi) {
       let picks = []; try { picks = JSON.parse($(fid(f.key)).dataset.sel || '[]'); } catch {}
+      if (!picks.length && $(fid(f.key)).value.trim()) picks = $(fid(f.key)).value.split(/,\s*/).filter(Boolean); // shown but never tapped: send what is shown
       const o = getOpts()[f.key] || {};
       if (f.keep) { k[f.key] = $(fid(f.key)).value; k[f.key + '#sel'] = $(fid(f.key)).dataset.sel || ''; }
       if (picks.length) {
@@ -1641,7 +1645,12 @@ $('form').addEventListener('submit', async (e) => {
     if (!presetId) { toast('Pick a Damper ID from the list'); return; }
     label = pickedId;
   }
-  localStorage.setItem('keeps', JSON.stringify(k));
+  { // keep the first inspector and date of the day; fill in any that were not set yet
+    const old = keeps(), sameDay = old.__day === today();
+    const next = sameDay ? { ...k, ...Object.fromEntries(Object.entries(old).filter(([, v]) => v !== '' && v != null)) } : k;
+    next.__day = today();
+    localStorage.setItem('keeps', JSON.stringify(next));
+  }
   const photos = [], skip = noPics();
   for (const name of PHOTOS) {
     if (skip.includes(name)) continue; // this table has no column for it
