@@ -621,7 +621,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-27-c';
+const APP_VERSION = '2026-10-27-d';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -681,7 +681,7 @@ async function refreshOptionsInner(manual) {
     }
     if (!t) { report('Table "' + c.table + '" not found in this base. Check the table name in Settings (tap Show tables to see them).', manual); return; }
     localStorage.setItem('tid', t.id); localStorage.setItem('vname', vname);
-    const viewQ = ''; // never limit to a saved view: always load every row
+    const viewQ = vid ? '&view=' + encodeURIComponent(vid) : ''; // a picked view (e.g. one building's Tech View) shows only its rows
     const out = {}, missing = [], problems = [], names = {}, notes = [];
     let pendingDetail = null, pendingRaw = {};
     for (const f of FIELDS) {
@@ -942,7 +942,9 @@ async function airtableGet(url, init) {
 }
 // Only one refresh at a time (saving settings, syncing and opening the app can all ask for one)
 let refreshing = false;
+let lastRefresh = 0;
 async function refreshOptions(manual) {
+  lastRefresh = Date.now();
   if (refreshing) { if (manual) report('Still loading the lists. Try again in a few seconds.', manual); return; }
   refreshing = true;
   try { await refreshOptionsInner(manual); } finally { refreshing = false; fillMainView(); renderHome(); }
@@ -1847,28 +1849,29 @@ function fillMainView() {
   list.forEach((n) => sel.append(new Option(n, n)));
   sel.value = want;
 }
-// Table picker at the top of the main page: only damper survey tables with "Tech View" in the name, plus these
+// Picker at the top of the main page: the views of the Damper Survey table (the same list Settings > Show tables
+// shows under it), plus these extra tables
+const SURVEY_TABLE = 'Damper Survey';
 const MAIN_TABLES = ['AVERY APP TESTING'];
-const DAMPER_COLS = ['Operational Test', 'Barrier Rating', 'Inspection Date'];
-// Table picker at the top of the main page (the tables come from the base's saved list)
+const surveyTable = () => getSchema().find((t) => norm(t.name) === norm(SURVEY_TABLE)) || getSchema().find((t) => norm(t.name).includes(norm(SURVEY_TABLE)));
 function fillMainTable() {
-  const sel = $('mTable'), c = cfg(), cur = findTable(c.table || '');
-  // Airtable does not tell apps which sidebar group a table is in, so a damper survey table is
-  // recognised by its columns: it has the inspection columns this app fills in
-  const isDamperTable = (t) => { const have = (t.fields || []).map(norm); return DAMPER_COLS.every((c) => have.includes(norm(c))); };
-  const tables = getSchema().filter((t) => (/tech\s*view/i.test(t.name) && isDamperTable(t)) || MAIN_TABLES.some((n) => n.toLowerCase() === t.name.trim().toLowerCase()));
+  const sel = $('mTable'), c = cfg(), cur = findTable(c.table || ''), st = surveyTable();
   sel.textContent = '';
-  for (const t of tables) sel.append(new Option(t.name, t.name));
-  if (cur && !tables.some((t) => t.id === cur.id)) sel.append(new Option(cur.name, cur.name)); // keep the table in use even if it is not in the list
-  if (!cur) sel.append(new Option(c.table || 'Tap Refresh lists to load tables', c.table || ''));
-  sel.value = cur ? cur.name : (c.table || '');
+  if (st) for (const v of viewsFor(st)) sel.append(new Option(v.name, 'v|' + st.name + '|' + v.name));
+  for (const n of MAIN_TABLES) { const t = findTable(n); if (t) sel.append(new Option(t.name, 't|' + t.name)); }
+  const want = cur ? (c.view ? 'v|' + cur.name + '|' + c.view : 't|' + cur.name) : '';
+  if (want && ![...sel.options].some((o) => o.value === want)) sel.append(new Option(c.view || cur.name, want)); // keep the one in use even if it is not in the list
+  if (!sel.options.length) sel.append(new Option(c.table || 'Tap Refresh lists to load the list', ''));
+  sel.value = want;
 }
 $('mTable').onchange = async () => {
-  const c = cfg(), name = $('mTable').value;
-  if (!name || (findTable(c.table || '') || {}).name === name) return;
-  // entries still waiting belong to this table: send them before switching, or they would go to the wrong one
-  if ((await allItems()).some((i) => i.status !== 'synced')) { fillMainTable(); toast('Some entries are still waiting to sync. Sync them first, then switch tables.'); return; }
-  saveCfg({ ...c, table: name, view: '', idField: '' });
+  const c = cfg(), [kind, table, view = ''] = $('mTable').value.split('|');
+  if (!kind) return;
+  const cur = findTable(c.table || '');
+  if (cur && cur.name === table && (c.view || '') === view) return;
+  // entries still waiting belong to the current table: send them before switching, or they would go to the wrong one
+  if ((!cur || cur.name !== table) && (await allItems()).some((i) => i.status !== 'synced')) { fillMainTable(); toast('Some entries are still waiting to sync. Sync them first, then switch.'); return; }
+  saveCfg({ ...c, table, view, idField: '' });
   fillMainView(); renderHome();
   refreshOptions(true);
 };
@@ -1996,8 +1999,16 @@ $('msgClose').onclick = () => $('msgDlg').close();
 function netState() { const on = navigator.onLine; $('net').textContent = on ? 'Online' : 'Offline'; document.querySelector('header').classList.toggle('off', !on); }
 addEventListener('online', () => { netState(); sync(); refreshOptions(); });
 addEventListener('offline', netState);
+// Keep the lists fresh while online: every 5 minutes, and when the app is opened again after 2 minutes away.
+// Not while a damper page is open, so nothing on the form moves while someone is filling it in.
+function autoRefresh(minAge) {
+  if (!navigator.onLine || document.hidden || $('detail').open || syncing || Date.now() - lastRefresh < minAge) return;
+  refreshOptions();
+}
+setInterval(() => autoRefresh(5 * 60 * 1000), 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { sync(); autoRefresh(2 * 60 * 1000); } });
+$('detail').addEventListener('close', () => setTimeout(() => autoRefresh(5 * 60 * 1000), 500));
 
-try { const c0 = JSON.parse(localStorage.getItem('cfg') || '{}'); if (c0.view) { c0.view = ''; localStorage.setItem('cfg', JSON.stringify(c0)); localStorage.removeItem('opts'); } } catch {}
 updateMsgDot(); buildFields(); buildPhotos(); netState(); render(); fillMainView(); renderHome(); sync(); refreshOptions();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
