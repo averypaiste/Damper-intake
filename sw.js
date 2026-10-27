@@ -1,5 +1,5 @@
 // Keeps the app available offline. Online: always fetch the newest files. Offline: use the saved copy.
-const CACHE = 'intake-v8';
+const CACHE = 'intake-v9';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
