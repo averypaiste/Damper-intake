@@ -98,8 +98,8 @@
   #detailBody textarea { min-height:110px; }
   .pblock { border:0; padding:0; margin-top:18px; }
   .pblock .ph b { font-size:13px; font-weight:500; color:var(--muted); }
-  .pblock .pbtns { justify-content:center; }
-  .pblock .pbtns .addbtn { flex:0 1 auto; border-radius:99px; background:var(--bg); border-color:var(--line); color:var(--ink); padding:9px 18px; }
+  .pblock .pbtns { justify-content:center; flex-wrap:wrap; }
+  .pblock .pbtns .addbtn { flex:0 1 auto; border-radius:99px; background:var(--bg); border-color:var(--line); color:var(--ink); padding:9px 14px; }
   .thumb { width:84px; height:84px; }
   .sect { text-transform:none; letter-spacing:0; font-size:13px; font-weight:500; }
   .chip { display:inline-block; padding:2px 10px; border-radius:99px; font-size:13px; font-weight:600; color:#1b1f24; background:#e4e7ec; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; vertical-align:middle; }
@@ -1192,14 +1192,16 @@ function openQuick(n, name, dd, recs) {
       const d = document.createElement('div'); d.className = 'thumb'; const im = document.createElement('img'); im.src = p.url;
       const b = document.createElement('button'); b.type = 'button'; b.textContent = '×'; b.onclick = () => { URL.revokeObjectURL(p.url); qPhotos.splice(i, 1); draw(); };
       d.append(im, b); thumbs.append(d); }); };
-    const mk = (text, cam) => {
-      const l = document.createElement('label'); l.className = 'addbtn'; l.style.cssText = 'flex:1;text-align:center;padding:12px;margin:0';
-      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.style.display = 'none'; if (cam) inp.setAttribute('capture', 'environment'); else inp.multiple = true;
+    const mk = (text, kind) => {
+      const l = document.createElement('label'); l.className = 'addbtn'; l.style.cssText = 'flex:1;text-align:center;padding:12px 6px;margin:0';
+      const inp = document.createElement('input'); inp.type = 'file'; inp.style.display = 'none';
+      if (kind !== 'file') inp.accept = 'image/*'; // no accept for files: opens the Files app / file browser
+      if (kind === 'cam') inp.setAttribute('capture', 'environment'); else inp.multiple = true;
       inp.onchange = async () => { for (const file of inp.files) { try { const blob = await shrink(file); qPhotos.push({ blob, url: URL.createObjectURL(blob) }); } catch { toast('Could not read a photo'); } } inp.value = ''; draw(); };
       l.append(text, inp); return l;
     };
     const bar = document.createElement('div'); bar.className = 'pbtns'; bar.style.cssText = 'display:flex;gap:8px';
-    bar.append(mk('📷 Take photo', true), mk('⬆ Upload file', false));
+    bar.append(mk('📷 Take photo', 'cam'), mk('🖼 Camera roll', 'roll'), mk('📁 Choose file', 'file'));
     body.append(bar, thumbs);
   } else if (f.multi) {
     el = document.createElement('input'); el.type = 'text'; el.readOnly = true; el.hidden = true;
@@ -1505,12 +1507,13 @@ function buildPhotos() {
     const blk = document.createElement('div'); blk.className = 'pblock';
     const head = document.createElement('div'); head.className = 'ph';
     const b = document.createElement('b'); b.textContent = name;
-    // two ways to add a photo: take one with the camera, or upload an existing one
+    // three ways to add a photo: take one with the camera, pick from the camera roll, or choose a file
     const cam = document.createElement('input'); cam.type = 'file'; cam.accept = 'image/*'; cam.setAttribute('capture', 'environment'); cam.id = 'c_' + fid(name);
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true; inp.id = 'p_' + fid(name);
+    const doc = document.createElement('input'); doc.type = 'file'; doc.multiple = true; doc.id = 'd_' + fid(name); // no accept: opens the Files app / file browser
     const mk = (input, text) => { const l = document.createElement('label'); l.className = 'addbtn'; l.htmlFor = input.id; l.textContent = text; l.style.margin = '0'; return l; };
     const btns = document.createElement('div'); btns.className = 'pbtns';
-    btns.append(mk(cam, '📷 Take photo'), mk(inp, '⬆ Upload file'), cam, inp);
+    btns.append(mk(cam, '📷 Take photo'), mk(inp, '🖼 Camera roll'), mk(doc, '📁 Choose file'), cam, inp, doc);
     head.append(b);
     const th = document.createElement('div'); th.className = 'thumbs'; th.id = 't_' + fid(name);
     const ex = document.createElement('div'); ex.id = 'ex_' + fid(name); ex.hidden = true;
@@ -1525,7 +1528,7 @@ function buildPhotos() {
       }
       e.target.value = ''; renderThumbs(name); scheduleDraft();
     };
-    cam.addEventListener('change', onPick); inp.addEventListener('change', onPick);
+    cam.addEventListener('change', onPick); inp.addEventListener('change', onPick); doc.addEventListener('change', onPick);
   }
   placeLocPic();
 }
