@@ -621,7 +621,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-27-b';
+const APP_VERSION = '2026-10-27-c';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1847,12 +1847,16 @@ function fillMainView() {
   list.forEach((n) => sel.append(new Option(n, n)));
   sel.value = want;
 }
-// Table picker at the top of the main page: only tables whose name starts with "Tech View", plus these
+// Table picker at the top of the main page: only damper survey tables with "Tech View" in the name, plus these
 const MAIN_TABLES = ['AVERY APP TESTING'];
+const DAMPER_COLS = ['Operational Test', 'Barrier Rating', 'Inspection Date'];
 // Table picker at the top of the main page (the tables come from the base's saved list)
 function fillMainTable() {
   const sel = $('mTable'), c = cfg(), cur = findTable(c.table || '');
-  const tables = getSchema().filter((t) => /^\s*tech\s*view/i.test(t.name) || MAIN_TABLES.some((n) => n.toLowerCase() === t.name.trim().toLowerCase()));
+  // Airtable does not tell apps which sidebar group a table is in, so a damper survey table is
+  // recognised by its columns: it has the inspection columns this app fills in
+  const isDamperTable = (t) => { const have = (t.fields || []).map(norm); return DAMPER_COLS.every((c) => have.includes(norm(c))); };
+  const tables = getSchema().filter((t) => (/tech\s*view/i.test(t.name) && isDamperTable(t)) || MAIN_TABLES.some((n) => n.toLowerCase() === t.name.trim().toLowerCase()));
   sel.textContent = '';
   for (const t of tables) sel.append(new Option(t.name, t.name));
   if (cur && !tables.some((t) => t.id === cur.id)) sel.append(new Option(cur.name, cur.name)); // keep the table in use even if it is not in the list
