@@ -98,8 +98,8 @@
   #detailBody textarea { min-height:110px; }
   .pblock { border:0; padding:0; margin-top:18px; }
   .pblock .ph b { font-size:13px; font-weight:500; color:var(--muted); }
-  .pblock .pbtns { justify-content:center; }
-  .pblock .pbtns .addbtn { flex:0 1 auto; border-radius:99px; background:var(--bg); border-color:var(--line); color:var(--ink); padding:9px 18px; }
+  .pblock .pbtns { justify-content:center; flex-wrap:wrap; }
+  .pblock .pbtns .addbtn { flex:0 1 auto; border-radius:99px; background:var(--bg); border-color:var(--line); color:var(--ink); padding:9px 14px; }
   .thumb { width:84px; height:84px; }
   .sect { text-transform:none; letter-spacing:0; font-size:13px; font-weight:500; }
   .chip { display:inline-block; padding:2px 10px; border-radius:99px; font-size:13px; font-weight:600; color:#1b1f24; background:#e4e7ec; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; vertical-align:middle; }
@@ -159,6 +159,8 @@
   <section id="home">
     <div class="card">
       <div hidden><select id="mView"><option value="">All dampers in this table</option></select></div>
+      <label for="mTable" style="margin-top:0">Table</label>
+      <select id="mTable" style="margin-bottom:12px"></select>
       <div class="row" style="margin-bottom:12px">
         <button type="button" class="secondary small" id="btnNew">+ New damper</button>
         <button type="button" class="secondary small" id="btnLists">↻ Refresh lists</button>
@@ -619,7 +621,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-21-q';
+const APP_VERSION = '2026-10-27-a';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -663,7 +665,7 @@ async function refreshOptionsInner(manual) {
     }
     const want = c.table.trim().toLowerCase(), wantView = c.view.trim().toLowerCase();
     const tables = (await r.json()).tables;
-    saveSchema(tables);
+    saveSchema(tables); fillMainTable();
     const isView = (v, w) => v.id === w || v.name.toLowerCase() === w;
     let t = tables.find((x) => x.id === c.table || x.name.toLowerCase() === want), vid = '', vname = '';
     if (!t) { // maybe a view name was typed where the table goes: use that view's table
@@ -873,7 +875,10 @@ async function refreshOptionsInner(manual) {
       await saveDetail(pendingDetail);
       savePhotos(c, t, viewQ, pendingDetail.photos); // runs in the background
     }
-    for (const name of PHOTOS) { const fl = findField(t, name); if (fl) names[name] = fl.name; else missing.push(name); }
+    const noPics = [];
+    for (const name of PHOTOS) { const fl = findField(t, name); if (fl) names[name] = fl.name; else noPics.push(name); }
+    localStorage.setItem('noPics', JSON.stringify(noPics)); showPhotoBlocks();
+    if (noPics.length) notes.unshift('This table has no ' + noPics.join(', ') + ' column, so ' + (noPics.length > 1 ? 'those photo boxes are' : 'that photo box is') + ' hidden.');
     localStorage.setItem('names', JSON.stringify(names));
     localStorage.setItem('opts', JSON.stringify(out));
     const snap = {};
@@ -892,7 +897,7 @@ async function refreshOptionsInner(manual) {
     else if (problems.length) msg = problems[0];
     else msg = where + ': lists loaded (' + summary + ').';
     if (!missing.length && !problems.length && eo && eo.scanned && eo.choices.length < eo.scanned / 2) msg += ' Most rows are empty in that column. Pick the column that shows each full damper ID under "Damper ID column" in Settings.';
-    if (notes.length && !missing.length && !problems.length) msg += ' ' + notes[0];
+    if (notes.length && !missing.length && !problems.length) msg += ' ' + notes.join(' ');
     report(msg, manual);
   } catch (err) {
     const net = err instanceof TypeError && /fetch|network|load/i.test(String(err.message));
@@ -1192,14 +1197,16 @@ function openQuick(n, name, dd, recs) {
       const d = document.createElement('div'); d.className = 'thumb'; const im = document.createElement('img'); im.src = p.url;
       const b = document.createElement('button'); b.type = 'button'; b.textContent = '×'; b.onclick = () => { URL.revokeObjectURL(p.url); qPhotos.splice(i, 1); draw(); };
       d.append(im, b); thumbs.append(d); }); };
-    const mk = (text, cam) => {
-      const l = document.createElement('label'); l.className = 'addbtn'; l.style.cssText = 'flex:1;text-align:center;padding:12px;margin:0';
-      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.style.display = 'none'; if (cam) inp.setAttribute('capture', 'environment'); else inp.multiple = true;
+    const mk = (text, kind) => {
+      const l = document.createElement('label'); l.className = 'addbtn'; l.style.cssText = 'flex:1;text-align:center;padding:12px 6px;margin:0';
+      const inp = document.createElement('input'); inp.type = 'file'; inp.style.display = 'none';
+      if (kind !== 'file') inp.accept = 'image/*'; // no accept for files: opens the Files app / file browser
+      if (kind === 'cam') inp.setAttribute('capture', 'environment'); else inp.multiple = true;
       inp.onchange = async () => { for (const file of inp.files) { try { const blob = await shrink(file); qPhotos.push({ blob, url: URL.createObjectURL(blob) }); } catch { toast('Could not read a photo'); } } inp.value = ''; draw(); };
       l.append(text, inp); return l;
     };
     const bar = document.createElement('div'); bar.className = 'pbtns'; bar.style.cssText = 'display:flex;gap:8px';
-    bar.append(mk('📷 Take photo', true), mk('⬆ Upload file', false));
+    bar.append(mk('📷 Take photo', 'cam'), mk('🖼 Camera roll', 'roll'), mk('📁 Choose file', 'file'));
     body.append(bar, thumbs);
   } else if (f.multi) {
     el = document.createElement('input'); el.type = 'text'; el.readOnly = true; el.hidden = true;
@@ -1505,12 +1512,13 @@ function buildPhotos() {
     const blk = document.createElement('div'); blk.className = 'pblock';
     const head = document.createElement('div'); head.className = 'ph';
     const b = document.createElement('b'); b.textContent = name;
-    // two ways to add a photo: take one with the camera, or upload an existing one
+    // three ways to add a photo: take one with the camera, pick from the camera roll, or choose a file
     const cam = document.createElement('input'); cam.type = 'file'; cam.accept = 'image/*'; cam.setAttribute('capture', 'environment'); cam.id = 'c_' + fid(name);
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true; inp.id = 'p_' + fid(name);
+    const doc = document.createElement('input'); doc.type = 'file'; doc.multiple = true; doc.id = 'd_' + fid(name); // no accept: opens the Files app / file browser
     const mk = (input, text) => { const l = document.createElement('label'); l.className = 'addbtn'; l.htmlFor = input.id; l.textContent = text; l.style.margin = '0'; return l; };
     const btns = document.createElement('div'); btns.className = 'pbtns';
-    btns.append(mk(cam, '📷 Take photo'), mk(inp, '⬆ Upload file'), cam, inp);
+    btns.append(mk(cam, '📷 Take photo'), mk(inp, '🖼 Camera roll'), mk(doc, '📁 Choose file'), cam, inp, doc);
     head.append(b);
     const th = document.createElement('div'); th.className = 'thumbs'; th.id = 't_' + fid(name);
     const ex = document.createElement('div'); ex.id = 'ex_' + fid(name); ex.hidden = true;
@@ -1525,11 +1533,14 @@ function buildPhotos() {
       }
       e.target.value = ''; renderThumbs(name); scheduleDraft();
     };
-    cam.addEventListener('change', onPick); inp.addEventListener('change', onPick);
+    cam.addEventListener('change', onPick); inp.addEventListener('change', onPick); doc.addEventListener('change', onPick);
   }
-  placeLocPic();
+  placeLocPic(); showPhotoBlocks();
 }
 const LOC_PIC = 'Location Pic';
+// Photo columns the current table does not have: their boxes are hidden so nothing is saved for them
+const noPics = () => { try { return JSON.parse(localStorage.getItem('noPics') || '[]'); } catch { return []; } };
+function showPhotoBlocks() { const no = noPics(); for (const n of PHOTOS) { const b = $('pb_' + fid(n)); if (b) b.hidden = no.includes(n); } }
 function placeLocPic() {
   const blk = $('pb_' + fid(LOC_PIC)), dt = $(fid('Inspection Date'));
   if (blk && dt && dt.parentElement) dt.parentElement.before(blk);
@@ -1629,8 +1640,9 @@ $('form').addEventListener('submit', async (e) => {
     label = pickedId;
   }
   localStorage.setItem('keeps', JSON.stringify(k));
-  const photos = [];
+  const photos = [], skip = noPics();
   for (const name of PHOTOS) {
+    if (skip.includes(name)) continue; // this table has no column for it
     (pendingPhotos[name] || []).forEach((p, i) =>
       photos.push({ field: colOf(name), name: `${name.replace(/\W+/g, '_')}_${i + 1}.jpg`, blob: p.blob, done: false }));
   }
@@ -1677,6 +1689,14 @@ const b64 = (blob) => new Promise((res, rej) => {
   fr.readAsDataURL(blob);
 });
 
+// Columns that were sent with a value but came back empty from Airtable (so the entry did not really land)
+function dropped(sent, res) {
+  const got = (res && res.fields) || {};
+  return Object.keys(sent).filter((k) => {
+    const v = sent[k]; if (v == null || v === '' || (Array.isArray(v) && !v.length)) return false;
+    const g = got[k]; return g == null || g === '' || (Array.isArray(g) && !g.length);
+  });
+}
 async function sync(manual) {
   const c = cfg();
   if (syncing) return;
@@ -1692,13 +1712,14 @@ async function sync(manual) {
         if (!it.recordId) {
           const res = await api(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}`,
             { fields: (({ [FIELDS.find((f) => f.existing).key]: _, ...rest }) => rest)(it.fields), typecast: true });
-          it.recordId = res.id; createdAny = true; await putItem(it);
+          it.recordId = res.id; createdAny = true; it.dropped = dropped(it.fields, res); await putItem(it);
         } else if (it.preset && !it.patched) {
           // existing damper: fill in its row instead of creating a new one
           const body = { ...it.fields }; delete body[FIELDS.find((f) => f.existing).key];
           if (Object.keys(body).length) {
-            await api(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}/${it.recordId}`,
+            const res = await api(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}/${it.recordId}`,
               { fields: body, typecast: true }, 'PATCH');
+            it.dropped = dropped(body, res);
           }
           it.patched = true; await putItem(it);
         }
@@ -1816,6 +1837,7 @@ function fillViewSelect(keep) {
   sel.value = want || '';
 }
 function fillMainView() {
+  fillMainTable();
   const sel = $('mView'), c = cfg(), want = c.view || '';
   const t = findTable(c.table || '');
   const list = viewsFor(t).map((v) => v.name);
@@ -1825,6 +1847,24 @@ function fillMainView() {
   list.forEach((n) => sel.append(new Option(n, n)));
   sel.value = want;
 }
+// Table picker at the top of the main page (the tables come from the base's saved list)
+function fillMainTable() {
+  const sel = $('mTable'), c = cfg(), cur = findTable(c.table || '');
+  const tables = getSchema();
+  sel.textContent = '';
+  for (const t of tables) sel.append(new Option(t.name, t.name));
+  if (!cur) sel.append(new Option(c.table || 'Tap Refresh lists to load tables', c.table || ''));
+  sel.value = cur ? cur.name : (c.table || '');
+}
+$('mTable').onchange = async () => {
+  const c = cfg(), name = $('mTable').value;
+  if (!name || (findTable(c.table || '') || {}).name === name) return;
+  // entries still waiting belong to this table: send them before switching, or they would go to the wrong one
+  if ((await allItems()).some((i) => i.status !== 'synced')) { fillMainTable(); toast('Some entries are still waiting to sync. Sync them first, then switch tables.'); return; }
+  saveCfg({ ...c, table: name, view: '', idField: '' });
+  fillMainView(); renderHome();
+  refreshOptions(true);
+};
 $('mView').onchange = () => {
   const c = cfg();
   saveCfg({ ...c, view: $('mView').value });
@@ -1914,6 +1954,7 @@ async function collectErrors() {
   const out = [];
   for (const it of await allItems()) {
     if (it.status === 'error' && it.errCode) out.push({ t: it.createdAt, title: 'Entry not sent: ' + String(it.label || '(no ID)').slice(0, 40), code: it.errCode, text: String(it.error || '').replace(/^\d+\s*/, '') });
+    if (it.dropped && it.dropped.length) out.push({ t: it.createdAt, title: 'Not saved in Airtable: ' + String(it.label || '(no ID)').slice(0, 40), code: '', text: 'Sent but Airtable shows these empty: ' + it.dropped.join(', ') + '. Table: ' + (cfg().table || '') });
   }
   const r = getJ('err_refresh'); if (r) out.push({ t: r.t, title: 'Lists could not be updated', code: r.code, text: r.text });
   const ph = getJ('err_photos'); if (ph) out.push({ t: ph.t, title: 'Photos could not be saved for offline', code: ph.code, text: ph.text });
