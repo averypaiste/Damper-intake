@@ -112,6 +112,10 @@
   .selitem { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; border:1px solid var(--line); border-radius:8px; padding:8px 10px; background:var(--bg); }
   .selitem button { padding:0 10px; font-size:18px; line-height:26px; background:rgba(0,0,0,.6); border-radius:99px; flex:0 0 auto; }
   #quick { max-width:520px; }
+  #viewer { padding:0; border:0; background:transparent; max-width:100vw; max-height:100vh; width:100vw; height:100dvh; }
+  #viewer::backdrop { background:rgba(0,0,0,.9); }
+  #viewer img { width:100%; height:100%; object-fit:contain; display:block; }
+  #viewerClose { position:fixed; top:max(12px, env(safe-area-inset-top)); right:12px; width:44px; height:44px; border-radius:50%; border:0; background:rgba(255,255,255,.9); color:#000; font-size:26px; line-height:1; padding:0; }
   #quick textarea, #quick input[type=text] { font-size:16px; }
   @keyframes flashbg { 0%,60% { background:rgba(255,200,0,.35); } 100% { background:transparent; } }
   .flash { animation:flashbg 2.2s ease-out; border-radius:8px; }
@@ -299,6 +303,11 @@
     <p>Only use this for a damper that is not in the list yet.</p>
   </div>
   <div class="row" style="margin-top:12px"><button type="button" id="helpClose">Got it</button></div>
+</dialog>
+
+<dialog id="viewer" aria-label="Photo">
+  <img id="viewerImg" alt="">
+  <button type="button" id="viewerClose" aria-label="Close">×</button>
 </dialog>
 
 <dialog id="msgDlg">
@@ -559,13 +568,23 @@ async function showInfo(label) {
     for (const a of g.atts) {
       let src = a.thumb || '';
       try { const hit = pc && await pc.match(PKEY + a.id); if (hit) src = URL.createObjectURL(await hit.blob()); } catch {}
-      const link = document.createElement('a'); link.target = '_blank'; link.rel = 'noopener';
+      const link = document.createElement('a');
       if (a.full) link.href = a.full; else if (src) link.href = src;
+      link.onclick = (e) => { e.preventDefault(); if (link.href) viewPhoto(link.href, src); }; // open on top of the damper page, not behind it
       if (src) { const im = document.createElement('img'); im.src = src; im.loading = 'lazy'; link.append(im); } else link.textContent = a.filename || 'photo (not saved)';
       th.append(link);
     }
   }
 }
+
+// Full-size photo viewer, shown above whatever page is open. Falls back to the saved preview when offline.
+function viewPhoto(url, fallback) {
+  const v = $('viewer'), im = $('viewerImg');
+  im.onerror = () => { im.onerror = null; if (fallback && im.src !== fallback) im.src = fallback; };
+  im.src = url; v.showModal();
+}
+$('viewer').addEventListener('click', () => $('viewer').close());
+$('viewer').addEventListener('close', () => { $('viewerImg').removeAttribute('src'); });
 
 // Photos are saved on the device (medium-size previews) so they can be seen offline too
 const PKEY = 'https://local.invalid/photo/';
@@ -624,7 +643,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-27-e';
+const APP_VERSION = '2026-10-28-a';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
