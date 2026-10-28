@@ -643,7 +643,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-28-a';
+const APP_VERSION = '2026-10-28-b';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1230,7 +1230,7 @@ function openQuick(n, name, dd, recs) {
       l.append(text, inp); return l;
     };
     const bar = document.createElement('div'); bar.className = 'pbtns'; bar.style.cssText = 'display:flex;gap:8px';
-    bar.append(mk('📷 Take photo', 'cam'), mk('🖼 Camera roll', 'roll'), mk('📁 Choose file', 'file'));
+    bar.append(mk('📷 Take photo', 'cam'), mk('🖼 Camera roll', 'roll'));
     body.append(bar, thumbs);
   } else if (f.multi) {
     el = document.createElement('input'); el.type = 'text'; el.readOnly = true; el.hidden = true;
@@ -1536,13 +1536,12 @@ function buildPhotos() {
     const blk = document.createElement('div'); blk.className = 'pblock';
     const head = document.createElement('div'); head.className = 'ph';
     const b = document.createElement('b'); b.textContent = name;
-    // three ways to add a photo: take one with the camera, pick from the camera roll, or choose a file
+    // two ways to add a photo: take one with the camera, or the camera roll (on iPhone its menu also offers Choose File)
     const cam = document.createElement('input'); cam.type = 'file'; cam.accept = 'image/*'; cam.setAttribute('capture', 'environment'); cam.id = 'c_' + fid(name);
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true; inp.id = 'p_' + fid(name);
-    const doc = document.createElement('input'); doc.type = 'file'; doc.multiple = true; doc.id = 'd_' + fid(name); // no accept: opens the Files app / file browser
     const mk = (input, text) => { const l = document.createElement('label'); l.className = 'addbtn'; l.htmlFor = input.id; l.textContent = text; l.style.margin = '0'; return l; };
     const btns = document.createElement('div'); btns.className = 'pbtns';
-    btns.append(mk(cam, '📷 Take photo'), mk(inp, '🖼 Camera roll'), mk(doc, '📁 Choose file'), cam, inp, doc);
+    btns.append(mk(cam, '📷 Take photo'), mk(inp, '🖼 Camera roll'), cam, inp);
     head.append(b);
     const th = document.createElement('div'); th.className = 'thumbs'; th.id = 't_' + fid(name);
     const ex = document.createElement('div'); ex.id = 'ex_' + fid(name); ex.hidden = true;
@@ -1557,7 +1556,7 @@ function buildPhotos() {
       }
       e.target.value = ''; renderThumbs(name); scheduleDraft();
     };
-    cam.addEventListener('change', onPick); inp.addEventListener('change', onPick); doc.addEventListener('change', onPick);
+    cam.addEventListener('change', onPick); inp.addEventListener('change', onPick);
   }
   placeLocPic(); showPhotoBlocks();
 }
