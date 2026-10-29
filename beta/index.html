@@ -767,7 +767,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-29-m (test copy)';
+const APP_VERSION = '2026-10-29-n (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1398,7 +1398,18 @@ function openQuick(n, name, dd, recs) {
   const rev = {};
   for (const oo of Object.values(getOpts() || {})) if (oo && oo.type === 'multipleRecordLinks' && oo.recs) for (const [nm, id] of Object.entries(oo.recs)) rev[id] = nm;
   let el, qPhotos = [];
-  if (pf) {
+  const pickOnly = f && f.type === 'select' && (o.choices || []).length > 0;
+  let startVal = '';
+  if (pickOnly) { // one box: the colored list itself. A pick saves straight away (Done for lists that take several)
+    el = document.createElement('input'); el.type = 'text'; el.readOnly = true; el.hidden = true;
+    if (f.multi) {
+      let names = cur[f.key] || []; if (!Array.isArray(names)) names = [names];
+      if (o.type === 'multipleRecordLinks') names = names.map((x) => rev[x] || x);
+      el.dataset.sel = JSON.stringify(names); el.value = names.join(', ');
+    } else el.value = Array.isArray(cur[f.key]) ? (cur[f.key][0] || '') : (cur[f.key] || '');
+    startVal = el.value;
+    body.append(el);
+  } else if (pf) {
     const thumbs = document.createElement('div'); thumbs.className = 'thumbs';
     const draw = () => { thumbs.textContent = ''; qPhotos.forEach((p, i) => {
       const d = document.createElement('div'); d.className = 'thumb'; const im = document.createElement('img'); im.src = p.url;
@@ -1443,7 +1454,7 @@ function openQuick(n, name, dd, recs) {
     el = document.createElement('select'); el.append(new Option('', '')); o.choices.forEach((c) => el.append(new Option(c, c))); el.value = cur[f.key] || ''; body.append(el);
   } else { el = document.createElement('input'); el.type = f.type === 'date' ? 'date' : f.type === 'number' ? 'number' : 'text'; el.value = cur[f.key] || (f.type === 'date' ? today() : ''); body.append(el); }
   $('qCancel').onclick = () => { qPhotos.forEach((p) => URL.revokeObjectURL(p.url)); q.close(); };
-  $('qSave').onclick = async () => {
+  const doSave = async () => {
     const fields = {}, photos = []; let fillVal = null, disp = '';
     if (pf) {
       qPhotos.forEach((p, i) => photos.push({ field: colOf(pf), name: `${pf.replace(/\W+/g, '_')}_${i + 1}.jpg`, blob: p.blob, done: false }));
@@ -1460,11 +1471,15 @@ function openQuick(n, name, dd, recs) {
       if (!picks.length) { val = o.type === 'multipleCollaborators' || o.type === 'multipleRecordLinks' || o.type === 'multipleSelects' ? [] : null; fillVal = []; }
       fields[colOf(f.key)] = val; disp = (Array.isArray(fillVal) ? fillVal : [fillVal]).join(', ');
     } else {
-      const v = el.value.trim(); if (!v) { q.close(); return; }
+      const v = el.value.trim();
+      if (!v && pickOnly) { fields[colOf(f.key)] = o.type === 'multipleSelects' || o.type === 'multipleCollaborators' ? [] : null; fillVal = ''; disp = ''; } // Clear
+      else if (!v) { q.close(); return; }
+      else {
       let val = f.type === 'number' ? Number(v) : v;
       if (o.type === 'multipleSelects') val = [v];
       else if (/Collaborator/.test(o.type || '')) { const pp = (o.people && o.people[v]) || {}; const w = pp.id ? { id: pp.id } : { email: pp.email || v }; val = o.type === 'multipleCollaborators' ? [w] : w; }
       fields[colOf(f.key)] = val; fillVal = v; disp = v;
+      }
     }
     const item = { id: crypto.randomUUID(), createdAt: Date.now(), label: n, fields, photos, recordId: rid, preset: true, status: 'pending', error: '', base: cfg().base, tbl: tableRef(cfg()) };
     try { await putItem(item); } catch { toast('Could not save: phone storage may be full. Sync or free up space.'); return; }
@@ -1475,6 +1490,14 @@ function openQuick(n, name, dd, recs) {
     q.close(); toast('Saved ✓');
     await render(); sync();
   };
+  $('qSave').onclick = doSave;
+  if (pickOnly) {
+    if (f.multi) el.dataset.changed = '1';
+    openPicker(f, el);
+    $('pkTitle').textContent = $('qTitle').textContent;
+    $('picker').addEventListener('close', () => { if (el.value !== startVal) doSave(); }, { once: true });
+    return;
+  }
   q.showModal();
   if (el && !f.multi) el.focus();
   if (el && f.multi && !JSON.parse(el.dataset.sel || '[]').length) openPicker(f, el); // nothing chosen yet: go straight to the list
