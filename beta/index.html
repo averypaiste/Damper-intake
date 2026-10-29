@@ -214,10 +214,22 @@
   #detailBody input, #detailBody select, #detailBody textarea { border-color:transparent; background:var(--bg); }
   #detailBody input:focus, #detailBody select:focus, #detailBody textarea:focus { border-color:#2d7ff9; outline:0; background:var(--card); }
   #dOp:empty { display:none; }
+  header #btnBack { background:transparent; border:0; color:#fff; font-size:30px; line-height:1; width:auto; padding:0 4px 4px 0; margin-right:-2px; }
+  /* pick-list fields show their choices as colored ovals, like Airtable */
+  .pv { position:absolute !important; opacity:0; pointer-events:none; width:1px !important; height:1px !important; padding:0 !important; }
+  .pillbox { position:relative; min-height:44px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:8px 30px 8px 12px; background:var(--bg); border-radius:6px; cursor:pointer; }
+  .pillbox::after { content:'▾'; position:absolute; right:12px; top:50%; transform:translateY(-50%); color:var(--muted); }
+  .pillbox .ph { color:var(--muted); }
+  .pillbox .chip { font-size:14px; padding:3px 11px; }
+  .chip .av { display:inline-block; width:18px; height:18px; border-radius:50%; color:#fff; font-size:10px; font-weight:700; text-align:center; line-height:18px; margin:0 5px 0 -7px; vertical-align:-3px; }
+  .pkitem.pk2 { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:11px 6px; }
+  .pkitem.pk2 .chip { font-size:14px; padding:3px 11px; white-space:normal; }
+  .pkitem .ck { color:#2d7ff9; font-weight:800; font-size:18px; }
 </style>
 </head>
 <body>
 <header>
+  <button type="button" id="btnBack" aria-label="Back to jobs" title="Jobs">‹</button>
   <div id="ttl"><h1><span class="long">Damper Inspection · TEST</span><span class="short">Dampers · TEST</span></h1><span id="net">Online</span></div>
   <button class="small secondary hic" id="btnMsgs" aria-label="Messages" title="Messages">✉<span id="msgDot" hidden style="position:absolute;top:-3px;right:-3px;width:10px;height:10px;border-radius:50%;background:#f79009"></span></button>
   <button class="small secondary hic" id="btnSettings" aria-label="Settings" title="Settings">⚙</button>
@@ -236,7 +248,7 @@
   </section>
   <section id="home">
     <div class="card">
-      <div class="jobbar"><button type="button" id="btnJobs">‹ Jobs</button><b id="jobName"></b><button type="button" class="secondary" id="btnOffline">⬇ Offline</button></div>
+      <div class="jobbar"><b id="jobName"></b><button type="button" class="secondary" id="btnOffline">⬇ Offline</button></div>
       <div hidden><select id="mView"><option value="">All dampers in this table</option></select></div>
       <div class="vrow">
         <select id="mTable" aria-label="View"></select>
@@ -557,17 +569,26 @@ function openPicker(f, target) {
     const hits = all.filter((n, i) => (!q || n.toLowerCase().includes(q)) && (!bv || info[i].b === bv) && (!fv || info[i].fl === fv));
     const keepTop = list.scrollTop;
     list.textContent = '';
+    const changed = () => target.dispatchEvent(new Event('change', { bubbles: true }));
+    if (!multi && !f.existing && target.value && !q) { // single choice: a way to empty it again
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'pkitem'; b.style.color = 'var(--muted)'; b.textContent = 'Clear';
+      b.onclick = () => { target.value = ''; dlg.close(); changed(); }; list.append(b);
+    }
     hits.slice(0, 1000).forEach((n) => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'pkitem'; b.textContent = n;
+      if (!f.existing) { // colored ovals, with a ✓ on what is picked
+        b.textContent = ''; b.classList.add('pk2'); b.append(pillEl(n, f));
+        const on = multi ? sel.includes(n) : target.value === n;
+        if (on) { const k = document.createElement('span'); k.className = 'ck'; k.textContent = '✓'; b.append(k); }
+      }
       if (multi) {
-        const on = sel.includes(n);
-        b.textContent = (on ? '✓ ' : '') + n; b.style.fontWeight = on ? '700' : '500';
+        if (f.existing) { const on = sel.includes(n); b.textContent = (on ? '✓ ' : '') + n; b.style.fontWeight = on ? '700' : '500'; }
         b.onclick = () => {
           sel = sel.includes(n) ? sel.filter((x) => x !== n) : [...sel, n];
-          target.dataset.sel = JSON.stringify(sel); target.value = sel.join(', '); scheduleDraft();
+          target.dataset.sel = JSON.stringify(sel); target.value = sel.join(', '); changed();
           draw(true);
         };
-      } else b.onclick = () => { target.value = n; dlg.close(); if (f.existing) { showInfo(n); applyFill(n); } };
+      } else b.onclick = () => { target.value = n; dlg.close(); if (f.existing) { showInfo(n); applyFill(n); } else changed(); };
       list.append(b);
     });
     list.scrollTop = keep === true ? keepTop : 0;
@@ -746,7 +767,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-29-l (test copy)';
+const APP_VERSION = '2026-10-29-m (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1116,11 +1137,23 @@ function chipEl(v) {
   c.style.background = CHIPCOL[String(v).trim().toLowerCase()] || PALETTE[h % PALETTE.length];
   return c;
 }
-const CHIP_FIELDS = ['Barrier Rating', 'Damper Mechanism', 'Operational Test'];
+// a choice as Airtable shows it: its own colored oval, or a gray oval with an initial for a person
+function pillEl(v, f) {
+  const o = getOpts()[f.key] || {};
+  if (!/Collaborator/.test(o.type || '')) return chipEl(v);
+  const c = document.createElement('span'); c.className = 'chip'; c.style.background = 'var(--line)'; c.style.color = 'var(--ink)';
+  let h = 0; for (const ch of String(v)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const av = document.createElement('span'); av.className = 'av'; av.style.background = ['#2d7ff9', '#8b46ff', '#06a09b', '#d74d26', '#b2158b', '#338a17'][h % 6]; av.textContent = String(v).trim()[0] || '?';
+  c.append(av, String(v)); return c;
+}
+const pickedOf = (el, f) => { if (f.multi) { try { const a = JSON.parse(el.dataset.sel || '[]'); if (a.length) return a; } catch {} return el.value ? el.value.split(', ') : []; } return el.value ? [el.value] : []; };
 function refreshChips() {
-  for (const k of CHIP_FIELDS) {
-    const el = $(fid(k)), cl = $('chip_' + fid(k)); if (!el || !cl) continue;
-    cl.textContent = ''; if (el.value) cl.append(chipEl(el.value));
+  for (const f of FIELDS) {
+    const el = $(fid(f.key)), pb = $('pl_' + fid(f.key)); if (!el || !pb) continue;
+    pb.textContent = '';
+    const vals = pickedOf(el, f);
+    if (!vals.length) { const ph = document.createElement('span'); ph.className = 'ph'; ph.textContent = f.multi ? 'Tap to choose (you can pick more than one)' : 'Tap to choose'; pb.append(ph); }
+    for (const v of vals) pb.append(pillEl(v, f));
   }
 }
 document.addEventListener('change', (e) => { if (e.target.closest && e.target.closest('#detail')) refreshChips(); });
@@ -1149,10 +1182,10 @@ function makeField(f) {
       el.placeholder = 'Tap to choose from ' + list.length + ' dampers';
       el.style.cursor = 'pointer';
       el.addEventListener('click', () => openPicker(f, el));
-    } else if (list.length) {
-      el = document.createElement('select');
-      el.append(new Option('', ''));
-      list.forEach((n) => el.append(new Option(n, n)));
+    } else if (list.length) { // one choice: tap to pick from the colored list
+      el = document.createElement('input'); el.type = 'text';
+      el.readOnly = true; el.autocomplete = 'off';
+      el.addEventListener('click', () => openPicker(f, el));
     } else { // no list loaded yet: plain box so the field still works
       el = document.createElement('input'); el.type = 'text';
       el.placeholder = o && /Collaborator/.test(o.type) ? 'Email address' : 'Type it (pick-list loads when online)';
@@ -1166,7 +1199,12 @@ function makeField(f) {
   el.id = fid(f.key);
   if (f.required) el.required = true;
   wrap.append(l, el);
-  if (CHIP_FIELDS.includes(f.key)) { const cl = document.createElement('div'); cl.className = 'chipline'; cl.id = 'chip_' + fid(f.key); wrap.append(cl); }
+  if (f.type === 'select' && !f.existing && el.readOnly) { // shown as colored ovals; the box underneath keeps the value
+    el.classList.add('pv'); el.tabIndex = -1; wrap.style.position = 'relative';
+    const pb = document.createElement('div'); pb.className = 'pillbox'; pb.id = 'pl_' + fid(f.key); pb.tabIndex = 0; pb.setAttribute('role', 'button');
+    pb.onclick = () => el.click();
+    wrap.append(pb);
+  }
   if (f.existing) { const inf = document.createElement('details'); inf.id = 'info'; inf.open = true; inf.hidden = true; wrap.append(inf); }
   return wrap;
 }
@@ -1260,6 +1298,7 @@ async function openDamper(label, force, focusName) {
   baseline = formState(); refreshChips();
   const key = (o.recs && o.recs[label]) || '';
   const had = key && await restoreDraft(key);
+  refreshChips();
   restoring = false;
   draftKey = key;
   $('draftBar').style.display = had ? 'flex' : 'none';
@@ -1277,6 +1316,7 @@ async function openNew(force) {
   restoring = true;
   baseline = formState();
   const had = !force && await restoreDraft('NEW');
+  refreshChips();
   restoring = false;
   draftKey = 'NEW';
   $('draftBar').style.display = had ? 'flex' : 'none';
@@ -2268,7 +2308,7 @@ function setJobBar() {
   btn.classList.toggle('on', !!o);
 }
 function showJobs(on) {
-  $('projects').hidden = !on; $('home').hidden = on; $('btnNew').hidden = on;
+  $('projects').hidden = !on; $('home').hidden = on; $('btnNew').hidden = on; $('btnBack').hidden = on;
   window.scrollTo(0, 0);
   if (on) { renderJobs(); loadBases(); }
 }
@@ -2418,7 +2458,7 @@ $('offKeep').onclick = () => markOffline('keep');
 $('offRemove').onclick = async () => { const t = offTarget; $('offDlg').close(); if (t) { await removeOffline(t.base); toast('Removed from this phone'); } };
 $('offCancel').onclick = () => $('offDlg').close();
 $('btnOffline').onclick = () => openOff(cfg().base);
-$('btnJobs').onclick = () => showJobs(true);
+$('btnBack').onclick = () => showJobs(true);
 $('btnBases').onclick = () => loadBases(true);
 $('pSearch').oninput = () => renderJobs();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) expireOffline(); });
