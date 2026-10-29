@@ -215,7 +215,7 @@
   #detailBody input, #detailBody select, #detailBody textarea { border-color:transparent; background:var(--bg); }
   #detailBody input:focus, #detailBody select:focus, #detailBody textarea:focus { border-color:#2d7ff9; outline:0; background:var(--card); }
   #dOp:empty { display:none; }
-  header #btnBack { background:transparent; border:0; color:#fff; font-size:30px; line-height:1; width:auto; padding:0 4px 4px 0; margin-right:-2px; }
+  header #btnToJobs { background:transparent; border:0; color:#fff; font-size:30px; line-height:1; width:auto; padding:0 4px 4px 0; margin-right:-2px; }
   /* pick-list fields show their choices as colored ovals, like Airtable */
   .pv { position:absolute !important; opacity:0; pointer-events:none; width:1px !important; height:1px !important; padding:0 !important; }
   .pillbox { position:relative; min-height:44px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:8px 30px 8px 12px; background:var(--bg); border-radius:6px; cursor:pointer; }
@@ -230,7 +230,7 @@
 </head>
 <body>
 <header>
-  <button type="button" id="btnBack" aria-label="Back to jobs" title="Jobs">‹</button>
+  <button type="button" id="btnToJobs" aria-label="Back to jobs" title="Jobs">‹</button>
   <div id="ttl"><h1><span class="long">Damper Inspection · TEST</span><span class="short">Dampers · TEST</span></h1><span id="net">Online</span></div>
   <button class="small secondary hic" id="btnMsgs" aria-label="Messages" title="Messages">✉<span id="msgDot" hidden style="position:absolute;top:-3px;right:-3px;width:10px;height:10px;border-radius:50%;background:#f79009"></span></button>
   <button class="small secondary hic" id="btnSettings" aria-label="Settings" title="Settings">⚙</button>
@@ -773,7 +773,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-29-p (test copy)';
+const APP_VERSION = '2026-10-29-q (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -2340,7 +2340,7 @@ function setJobBar() {
   btn.classList.toggle('on', !!o);
 }
 function showJobs(on) {
-  $('projects').hidden = !on; $('home').hidden = on; $('btnNew').hidden = on; $('btnBack').hidden = on;
+  $('projects').hidden = !on; $('home').hidden = on; $('btnNew').hidden = on; $('btnToJobs').hidden = on;
   window.scrollTo(0, 0);
   if (on) { renderJobs(); loadBases(); }
 }
@@ -2490,7 +2490,7 @@ $('offKeep').onclick = () => markOffline('keep');
 $('offRemove').onclick = async () => { const t = offTarget; $('offDlg').close(); if (t) { await removeOffline(t.base); toast('Removed from this phone'); } };
 $('offCancel').onclick = () => $('offDlg').close();
 $('btnOffline').onclick = () => openOff(cfg().base);
-$('btnBack').onclick = () => showJobs(true);
+$('btnToJobs').onclick = () => showJobs(true);
 $('btnBases').onclick = () => loadBases(true);
 $('pSearch').oninput = () => renderJobs();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) expireOffline(); });
