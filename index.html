@@ -172,6 +172,48 @@
   .rdot { display:inline-block; width:11px; height:11px; border-radius:50%; background:#d92d20; margin-right:8px; vertical-align:middle; flex:0 0 auto; }
   #dlist .pkitem { display:flex; justify-content:space-between; align-items:center; gap:8px; }
   .pend { font-size:12px; color:#b54708; font-weight:600; white-space:nowrap; }
+  /* Jobs home page */
+  .ptop { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .ptop h2 { flex:1; margin:0; font-size:20px; }
+  .pcats { display:flex; gap:6px; overflow-x:auto; margin:10px 0 2px; scrollbar-width:none; }
+  .pcats::-webkit-scrollbar { display:none; }
+  .pcat { flex:0 0 auto; border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:99px; padding:6px 12px; font-size:14px; font-weight:500; }
+  .pcat.on { background:#1a7f4b; border-color:#1a7f4b; color:#fff; }
+  .psec { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:16px 2px 6px; }
+  .job { display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px; margin-bottom:7px; cursor:pointer; }
+  .job.cur { border-color:#1a7f4b; box-shadow:0 0 0 1px #1a7f4b; }
+  .jsq { width:40px; height:40px; border-radius:9px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:800; font-size:16px; flex:0 0 auto; }
+  .jt { flex:1; min-width:0; }
+  .jt b { display:block; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .jt span { display:block; font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .jt .joff { color:#1a7f4b; font-weight:700; }
+  .jbtn { background:transparent; color:var(--muted); border:0; padding:6px 4px; font-size:19px; flex:0 0 auto; }
+  .jbtn.on { color:#f5a623; }
+  .jobbar { display:flex; align-items:center; gap:8px; margin:0 0 10px; }
+  .jobbar b { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:15px; }
+  #btnJobs { background:transparent; color:var(--brand); border:0; padding:4px 6px 4px 0; font-size:15px; flex:0 0 auto; }
+  #btnOffline { flex:0 0 auto; padding:6px 10px; font-size:13px; border-radius:99px; }
+  #btnOffline.on { background:#1a7f4b; border-color:#1a7f4b; color:#fff; }
+  .offopt { display:block; width:100%; text-align:left; margin-top:8px; }
+  .offopt small { display:block; font-weight:400; opacity:.85; }
+  /* Airtable-style grid */
+  .gridwrap { border-radius:6px; border-color:#dcdcdc; }
+  .gc { min-height:44px; font-size:13px; padding:6px 8px; border-color:#e6e6e6; }
+  .ghead .gc { min-height:32px; background:#f5f5f5; color:#444; font-weight:500; font-size:12px; border-bottom-color:#dcdcdc; }
+  .gc img { width:40px; height:32px; }
+  .gnum { color:#999; font-size:11px; font-weight:400; min-width:24px; flex:0 0 auto; }
+  .fi { color:#8a8a8a; font-size:11px; margin-right:5px; font-weight:400; flex:0 0 auto; }
+  .ggrp { background:#f7f7f7; padding:8px 10px; font-weight:400; font-size:12px; color:#666; border-color:#dcdcdc; }
+  .ggrp .gk { font-size:11px; color:#888; margin-right:6px; }
+  .gcount { font-size:11px; color:#888; white-space:nowrap; } .gcount b { color:var(--ink); margin-left:4px; font-weight:600; }
+  .lk { display:inline-block; background:#e9eefa; color:#1f3a7a; border-radius:4px; padding:1px 6px; font-size:12px; margin-right:3px; white-space:nowrap; }
+  .chip { font-weight:500; font-size:12px; padding:2px 9px; }
+  @media (prefers-color-scheme: dark) { .ghead .gc { background:#232a33; color:#c7ced8; } .ggrp { background:#1f252d; color:#aab3bf; } .lk { background:#26344f; color:#cdd9f5; } }
+  /* Airtable-style damper page */
+  #fields > div, #fields2 > div { border-bottom:1px solid var(--line); padding-bottom:12px; }
+  #detailBody input, #detailBody select, #detailBody textarea { border-color:transparent; background:var(--bg); }
+  #detailBody input:focus, #detailBody select:focus, #detailBody textarea:focus { border-color:#2d7ff9; outline:0; background:var(--card); }
+  #dOp:empty { display:none; }
 </style>
 </head>
 <body>
@@ -184,8 +226,17 @@
 
 <button type="button" id="btnNew">+ New damper</button>
 <main>
+  <section id="projects" hidden>
+    <div class="ptop"><h2>Jobs</h2><button type="button" class="secondary small" id="btnBases" aria-label="Refresh jobs">↻</button></div>
+    <div class="sbar"><input id="pSearch" type="search" placeholder="🔍 Search job # or hospital…" autocomplete="off" autocapitalize="off" spellcheck="false"><span id="pCount" class="hint" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);margin:0"></span></div>
+    <div class="pcats" id="pCats"></div>
+    <p class="hint" id="pMsg" hidden></p>
+    <div id="pList"></div>
+    <p class="hint" id="pStore" style="text-align:center;margin:14px 0"></p>
+  </section>
   <section id="home">
     <div class="card">
+      <div class="jobbar"><button type="button" id="btnJobs">‹ Jobs</button><b id="jobName"></b><button type="button" class="secondary" id="btnOffline">⬇ Offline</button></div>
       <div hidden><select id="mView"><option value="">All dampers in this table</option></select></div>
       <div class="vrow">
         <select id="mTable" aria-label="View"></select>
@@ -220,7 +271,7 @@
   <dialog id="detail">
     <div id="detailHead">
       <button type="button" id="btnBack" aria-label="Close">×</button>
-      <b id="dTitle"></b>
+      <b id="dTitle"></b><span id="dOp"></span>
     </div>
     <div id="detailBody">
       <div id="missBox" hidden><div class="mk">Missing Fields / Inconsistencies</div><div id="missText"></div></div>
@@ -244,6 +295,15 @@
     <div id="navBar"><button type="button" id="navPrev" aria-label="Previous damper">‹</button><span id="navPos"></span><button type="button" id="navNext" aria-label="Next damper">›</button></div>
   </dialog>
 </main>
+
+<dialog id="offDlg">
+  <h2 id="offTitle" style="margin:0 0 4px">Use this job offline</h2>
+  <p class="hint" id="offHint" style="margin:0 0 6px">Saves this job's dampers and small copies of its photos on this phone, so it works without signal.</p>
+  <button type="button" class="offopt" id="offToday">Today only<small>Clears itself tomorrow</small></button>
+  <button type="button" class="offopt secondary" id="offKeep">Keep until I remove it</button>
+  <button type="button" class="offopt secondary" id="offRemove" style="color:#b42318;border-color:#b42318">Remove from this phone</button>
+  <button type="button" class="offopt secondary" id="offCancel" style="border:0;text-align:center">Cancel</button>
+</dialog>
 
 <dialog id="dlg">
   <form method="dialog" id="setForm">
@@ -305,6 +365,10 @@
     <p>Someone started this damper, but some info is still missing or doesn't match. Tap the damper. The top of the page tells you what to fix.</p>
     <div class="hq"><b>Tap a damper</b></div>
     <p>Opens its page. Fill in what you need, add photos, then tap <b>Save entry</b>. Tap the <b>×</b> to close the page.</p>
+    <div class="hq"><b>‹ Jobs</b></div>
+    <p>Shows every job you can open. Search by job number or hospital, tap ☆ to pin a job to the top, and tap a job to open it.</p>
+    <div class="hq"><b>⬇ Offline</b></div>
+    <p>Saves one job on your phone so it works with no signal: <b>Today only</b> clears itself tomorrow, <b>Keep until I remove it</b> stays. Only the fields in the job's Tech View and small copies of its photos are saved. Jobs that are not saved still work whenever you have signal.</p>
     <div class="hq"><b>↻ Refresh lists</b></div>
     <p>Gets the newest dampers, info and photos. Tap it when you have Wi-Fi or signal, and before you go somewhere with no signal.</p>
     <div class="hq"><b>No signal? No problem.</b></div>
@@ -565,9 +629,10 @@ async function showInfo(label) {
   const saved = (d && d.pics && d.pics[recId]) || {};
   if (navigator.onLine && c.token) {
     try {
-      const r = await fetch(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}/${recId}`, { headers: { Authorization: 'Bearer ' + c.token } });
-      if (r.ok) {
-        const f = (await r.json()).fields || {};
+      const pq = ((d && d.photos) || []).map((n) => '&fields%5B%5D=' + encodeURIComponent(n)).join('');
+      const r = pq ? await fetch(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}?filterByFormula=${encodeURIComponent(`RECORD_ID()='${recId}'`)}${pq}`, { headers: { Authorization: 'Bearer ' + c.token } }) : null;
+      if (r && r.ok) {
+        const f = (((await r.json()).records || [])[0] || {}).fields || {};
         for (const name of (d && d.photos) || []) {
           const at = f[name]; if (!Array.isArray(at) || !at.length) continue;
           groups.push({ name, atts: at.map((a) => ({ id: a.id, filename: a.filename, full: a.url, thumb: a.thumbnails && (a.thumbnails.large || a.thumbnails.small || {}).url })) });
@@ -575,7 +640,7 @@ async function showInfo(label) {
       }
     } catch { /* fall back to what is saved */ }
   }
-  if (!groups.length) groups = Object.entries(saved).map(([name, atts]) => ({ name, atts: atts.map((a) => ({ id: a.id, filename: a.fn })) }));
+  if (!groups.length) groups = Object.entries(saved).map(([name, atts]) => ({ name, atts: atts.map((a) => ({ id: a.id, filename: a.fn, thumb: navigator.onLine ? a.u : '' })) }));
   if (seq !== infoSeq) return;
   const pc = await caches.open('intake-photos').catch(() => null);
   const names = getNames();
@@ -619,7 +684,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
   try {
     const cache = await caches.open('intake-photos');
     const have = new Set((await cache.keys()).map((r) => r.url.slice(PKEY.length)));
-    const pics = {}, todo = [], seen = new Set();
+    const pics = {}, todo = [], seen = new Set(), off = isOffline(c.base), base = c.base;
     let offset = '';
     for (let pg = 0; pg < 100; pg++) {
       const r = await airtableGet(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}?pageSize=100${photoNames.map((n) => '&fields%5B%5D=' + encodeURIComponent(n)).join('')}${viewQ}${offset ? '&offset=' + encodeURIComponent(offset) : ''}`, { headers: { Authorization: 'Bearer ' + c.token } });
@@ -629,16 +694,19 @@ async function savePhotos(c, t, viewQ, photoNames) {
         const at = rec.fields[n]; if (!Array.isArray(at)) continue;
         for (const a of at) {
           (pics[rec.id] ||= {})[n] ||= [];
-          pics[rec.id][n].push({ id: a.id, fn: a.filename || '' });
-          seen.add(a.id);
           const u = a.thumbnails && (a.thumbnails.large || a.thumbnails.small || {}).url;
-          if (u && !have.has(a.id)) todo.push({ id: a.id, u });
+          pics[rec.id][n].push({ id: a.id, fn: a.filename || '', u: u || '' });
+          seen.add(a.id);
+          if (off && u && !have.has(a.id)) todo.push({ id: a.id, u });
         }
       }
       if (!j.offset) break;
       offset = j.offset;
     }
-    const d = await loadDetail(); if (d) { d.pics = pics; await saveDetail(d); renderHome(); }
+    if (cfg().base !== base) return; // switched to another job meanwhile
+    const d = await loadDetail(), prev = [];
+    for (const r of Object.values((d && d.pics) || {})) for (const l of Object.values(r)) for (const a of l) prev.push(a.id);
+    if (d) { d.pics = pics; await saveDetail(d); renderHome(); }
     total = todo.length;
     let next = 0;
     const worker = async () => {
@@ -651,11 +719,17 @@ async function savePhotos(c, t, viewQ, photoNames) {
           done++;
         } catch (e) { failed++; lastWhy = (e && e.message && /^\d{3}$/.test(e.message)) ? e.message : ''; lastWhyText = e && e.message ? e.message : String(e); if (e && /quota/i.test(String(e.name) + String(e.message))) { next = todo.length; } }
         setDl('Saving photos for offline: ' + (done + failed) + ' of ' + total);
+        if (cfg().base !== base) next = todo.length; // switched to another job: stop
       }
     };
     await Promise.all([worker(), worker(), worker(), worker()]);
-    // forget previews of photos that no longer exist
-    for (const id of have) if (!seen.has(id)) await cache.delete(PKEY + id);
+    // forget previews of this job's photos that no longer exist (other jobs' photos are left alone)
+    for (const id of prev) if (!seen.has(id) && have.has(id)) await cache.delete(PKEY + id);
+    if (off && isOffline(base) && cfg().base === base) { // how much this job takes on the phone
+      let bytes = JSON.stringify(d || {}).length;
+      for (const id of seen) { try { const h = await cache.match(PKEY + id); if (h) bytes += (await h.blob()).size; } catch {} }
+      const m = offMap(); if (m[base]) { m[base].bytes = bytes; setOffMap(m); } setJobBar();
+    }
     setErr('err_photos', failed ? { t: Date.now(), code: String(lastWhy || ''), text: `${failed} of ${total} photos could not be saved for offline viewing (${lastWhyText || 'unknown reason'}). Tap Refresh lists to retry.` } : null);
   } catch (e) { setErr('err_photos', { t: Date.now(), code: '', text: 'Could not save photos for offline: ' + (e && e.message ? e.message : e) }); }
   updateMsgDot();
@@ -665,7 +739,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-29-k';
+const APP_VERSION = '2026-10-29-l';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -702,14 +776,20 @@ async function refreshOptionsInner(manual) {
   if (!c.token) { if (manual) toast('Add your token in Settings first'); return; }
   if (!navigator.onLine) { if (manual) toast('Needs a connection'); return; }
   try {
-    const r = await airtableGet(`https://api.airtable.com/v0/meta/bases/${c.base}/tables`, { headers: { Authorization: 'Bearer ' + c.token } });
+    const r = await airtableGet(`https://api.airtable.com/v0/meta/bases/${c.base}/tables?include%5B%5D=visibleFieldIds`, { headers: { Authorization: 'Bearer ' + c.token } });
     if (!r.ok) {
-      report(r.status === 401 || r.status === 403 ? 'Token needs the schema.bases:read scope and access to this base (error ' + r.status + ')' : 'Could not load lists (error ' + r.status + ')', manual);
+      report(r.status === 401 ? 'Airtable refused the token (error 401). Check it in Settings.' : r.status === 403 || r.status === 404 ? 'This job is not shared with your token yet (error ' + r.status + '). In Airtable, edit the token and add this base (or the whole workspace).' : 'Could not load lists (error ' + r.status + ')', manual);
       return;
     }
-    const want = c.table.trim().toLowerCase(), wantView = c.view.trim().toLowerCase();
     const tables = (await r.json()).tables;
-    saveSchema(tables); fillMainTable();
+    saveSchema(tables);
+    if (localStorage.getItem('autoView')) { // a job opened for the first time: start on its first Tech View
+      localStorage.removeItem('autoView');
+      const st = surveyTable(), tv = st && techViews(st)[0];
+      if (st && !c.view) { c.table = st.name; c.view = tv ? tv.name : ''; localStorage.setItem('cfg', JSON.stringify({ ...JSON.parse(localStorage.getItem('cfg') || '{}'), table: c.table, view: c.view })); }
+    }
+    fillMainTable();
+    const want = c.table.trim().toLowerCase(), wantView = c.view.trim().toLowerCase();
     const isView = (v, w) => v.id === w || v.name.toLowerCase() === w;
     let t = tables.find((x) => x.id === c.table || x.name.toLowerCase() === want), vid = '', vname = '';
     if (!t) { // maybe a view name was typed where the table goes: use that view's table
@@ -723,8 +803,16 @@ async function refreshOptionsInner(manual) {
         fillMainView();
       }
     }
+    if (!t && norm(c.table) === norm(SURVEY_TABLE)) { report('This job has no Damper Survey table, so there is nothing to show here yet.', manual); return; }
     if (!t) { report('Table "' + c.table + '" not found in this base. Check the table name in Settings (tap Show tables to see them).', manual); return; }
     localStorage.setItem('tid', t.id); localStorage.setItem('vname', vname);
+    // Only the fields shown in the picked view (e.g. a Tech View) are ever downloaded; hidden fields stay in Airtable
+    const vobj = vid && (t.views || []).find((v) => v.id === vid);
+    const visIds = vobj && Array.isArray(vobj.visibleFieldIds) ? new Set(vobj.visibleFieldIds) : null;
+    const vis = (fd) => !visIds || visIds.has(fd.id) || fd.id === t.primaryFieldId;
+    const hiddenNames = [...new Set([...FIELDS.filter((f) => !f.existing && !f.newOnly).map((f) => f.key), ...PHOTOS, ...INFO_FIELDS, MISS_FIELD])]
+      .filter((n) => { const fd = findField(t, n); return fd && !vis(fd); });
+    localStorage.setItem('hidden', JSON.stringify(hiddenNames));
     const viewQ = vid ? '&view=' + encodeURIComponent(vid) : ''; // a picked view (e.g. one building's Tech View) shows only its rows
     const out = {}, missing = [], problems = [], names = {}, notes = [];
     let pendingDetail = null, pendingRaw = {};
@@ -740,6 +828,7 @@ async function refreshOptionsInner(manual) {
       names[f.key] = fld.name;
       if (!f.existing && COMPUTED.test(fld.type)) problems.push('"' + fld.name + '" is a calculated column in Airtable (' + fld.type + '), so nothing can be saved to it. Is there another column with a similar name?');
       out[f.key] = { type: fld.type, choices: ((fld.options && fld.options.choices) || []).map((x) => x.name) };
+      if (fld.options && fld.options.choices && fld.options.choices.some((x) => x.color)) out[f.key].colors = Object.fromEntries(fld.options.choices.map((x) => [x.name, x.color]));
       if (f.multi && fld.type === 'multipleRecordLinks' && fld.options && fld.options.linkedTableId) {
         // linked-record field: the choices are the rows of the linked table (shown by its first column)
         const lt = tables.find((x) => x.id === fld.options.linkedTableId);
@@ -788,7 +877,7 @@ async function refreshOptionsInner(manual) {
           }
         };
         // every column except photos/buttons is saved so the whole record can be shown offline
-        const infoFields = t.fields.filter((x) => /Attachment/i.test(x.type) || INFO_FIELDS.some((n) => norm(n) === norm(x.name)));
+        const infoFields = t.fields.filter((x) => vis(x) && (/Attachment/i.test(x.type) || INFO_FIELDS.some((n) => norm(n) === norm(x.name))));
         const showCols = infoFields.filter((x) => !/Attachment/i.test(x.type));
         for (const x of showCols) if (x.type === 'multipleRecordLinks') await ensureLinks(x);
         if (bcol && bcol.type === 'multipleRecordLinks') await ensureLinks(bcol);
@@ -802,9 +891,9 @@ async function refreshOptionsInner(manual) {
           return String(v);
         };
         const det = {}, rawFill = {}, flags = {};
-        const missCol = findField(t, MISS_FIELD);
+        const missCol0 = findField(t, MISS_FIELD), missCol = missCol0 && vis(missCol0) ? missCol0 : null;
         // the form's own fields are fetched too, so they can be filled in from what Airtable already has
-        const fillCols = FIELDS.filter((x) => !x.existing && !x.newOnly).map((x) => ({ key: x.key, fd: findField(t, x.key) })).filter((x) => x.fd);
+        const fillCols = FIELDS.filter((x) => !x.existing && !x.newOnly).map((x) => ({ key: x.key, fd: findField(t, x.key) })).filter((x) => x.fd && vis(x.fd));
         const wantCols = [...new Set([fld.name, ...(bcol ? [bcol.name] : []), ...showCols.map((x) => x.name), ...fillCols.map((x) => x.fd.name), ...(missCol ? [missCol.name] : [])])];
         const colsQ = wantCols.map((n) => '&fields%5B%5D=' + encodeURIComponent(n)).join('');
         let offset = '', scanned = 0;
@@ -847,7 +936,7 @@ async function refreshOptionsInner(manual) {
         if (dup) notes.push(bcol ? 'Some dampers share both a building and an ID. They are marked (2), (3)…' : 'Some IDs appear more than once and no "Building" column was found to tell them apart.');
         order.sort(cmpDamper);
         out[f.key].recs = recs; out[f.key].scanned = scanned; out[f.key].col = fld.name;
-        pendingDetail = { order: showCols.map((x) => x.name), photos: infoFields.filter((x) => /Attachment/i.test(x.type)).map((x) => x.name), recs: det, flags, at: Date.now() };
+        pendingDetail = { order: showCols.map((x) => x.name), links: showCols.filter((x) => x.type === 'multipleRecordLinks').map((x) => x.name), photos: infoFields.filter((x) => /Attachment/i.test(x.type)).map((x) => x.name), recs: det, flags, at: Date.now() };
         pendingRaw = rawFill;
         out[f.key].choices = order;
       }
@@ -920,11 +1009,11 @@ async function refreshOptionsInner(manual) {
       savePhotos(c, t, viewQ, pendingDetail.photos); // runs in the background
     }
     const noPics = [];
-    for (const name of PHOTOS) { const fl = findField(t, name); if (fl) names[name] = fl.name; else noPics.push(name); }
+    for (const name of PHOTOS) { const fl = findField(t, name); if (fl) names[name] = fl.name; if (!fl || !vis(fl)) noPics.push(name); }
     localStorage.setItem('noPics', JSON.stringify(noPics)); showPhotoBlocks();
-    if (noPics.length) notes.unshift('This table has no ' + noPics.join(', ') + ' column, so ' + (noPics.length > 1 ? 'those photo boxes are' : 'that photo box is') + ' hidden.');
+    if (noPics.length && !visIds) notes.unshift('This table has no ' + noPics.join(', ') + ' column, so ' + (noPics.length > 1 ? 'those photo boxes are' : 'that photo box is') + ' hidden.');
     localStorage.setItem('names', JSON.stringify(names));
-    localStorage.setItem('opts', JSON.stringify(out));
+    localStorage.setItem('opts', JSON.stringify(out)); colorMemo = null;
     const snap = {};
     for (const f of FIELDS) snap[f.key] = { v: $(fid(f.key)).value, sel: $(fid(f.key)).dataset.sel || '' };
     buildFields();
@@ -1000,8 +1089,22 @@ async function refreshOptions(manual) {
 const fid = (k) => 'f_' + k.replace(/\W+/g, '_');
 const CHIPCOL = { pass:'#c2f0c2', fail:'#ffc7d1', 'n/a':'#e4e7ec', 'no access':'#ffe0b3', 'smoke barrier':'#bfe3ff', 'no operational test yet':'#ffd8b5' };
 const PALETTE = ['#bfe3ff','#d9ccff','#ffd8b5','#c8f0e6','#ffe9a8','#f5cdf0','#d4e5b8','#e4e7ec'];
+// Airtable's own select colors (the names its API uses), so pills look the same as in Airtable
+const AT_COLORS = {
+  blueLight2:'#cfdfff', cyanLight2:'#d0f0fd', tealLight2:'#c2f5e9', greenLight2:'#d1f7c4', yellowLight2:'#ffeab6', orangeLight2:'#fee2d5', redLight2:'#ffdce5', pinkLight2:'#ffdaf6', purpleLight2:'#ede2fe', grayLight2:'#eeeeee',
+  blueLight1:'#9cc7ff', cyanLight1:'#77d1f3', tealLight1:'#72ddc3', greenLight1:'#93e088', yellowLight1:'#ffd66e', orangeLight1:'#ffa981', redLight1:'#ff9eb7', pinkLight1:'#f99de2', purpleLight1:'#cdb0ff', grayLight1:'#cccccc',
+  blueBright:'#2d7ff9', cyanBright:'#18bfff', tealBright:'#20d9d2', greenBright:'#20c933', yellowBright:'#fcb400', orangeBright:'#ff6f2c', redBright:'#f82b60', pinkBright:'#ff08c2', purpleBright:'#8b46ff', grayBright:'#666666',
+  blueDark1:'#2750ae', cyanDark1:'#0b76b7', tealDark1:'#06a09b', greenDark1:'#338a17', yellowDark1:'#b87503', orangeDark1:'#d74d26', redDark1:'#ba1e45', pinkDark1:'#b2158b', purpleDark1:'#6b1cb0', grayDark1:'#444444',
+};
+let colorMemo = null;
+const chipColors = () => {
+  if (!colorMemo) { colorMemo = {}; for (const o of Object.values(getOpts() || {})) if (o && o.colors) for (const [k, v] of Object.entries(o.colors)) if (!(k in colorMemo)) colorMemo[k] = v; }
+  return colorMemo;
+};
 function chipEl(v) {
   const c = document.createElement('span'); c.className = 'chip'; c.textContent = v;
+  const at = chipColors()[String(v)];
+  if (at && AT_COLORS[at]) { c.style.background = AT_COLORS[at]; if (/Bright|Dark1/.test(at)) c.style.color = '#fff'; return c; }
   let h = 0; for (const ch of String(v)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   c.style.background = CHIPCOL[String(v).trim().toLowerCase()] || PALETTE[h % PALETTE.length];
   return c;
@@ -1060,6 +1163,18 @@ function makeField(f) {
   if (f.existing) { const inf = document.createElement('details'); inf.id = 'info'; inf.open = true; inf.hidden = true; wrap.append(inf); }
   return wrap;
 }
+// Fields the picked Tech View hides are left off the damper page too (they are not downloaded)
+const hiddenCols = () => { try { return JSON.parse(localStorage.getItem('hidden') || '[]'); } catch { return []; } };
+function applyHidden() {
+  const h = hiddenCols().map(norm);
+  for (const f of FIELDS) {
+    if (f.existing || f.newOnly) continue;
+    const el = $(fid(f.key)); if (!el) continue;
+    const off = h.includes(norm(f.key)), w = el.parentElement;
+    if (w) w.hidden = off;
+    if (f.required) el.required = !off;
+  }
+}
 function buildFields() {
   const lp = $('pb_' + fid(LOC_PIC)); if (lp) $('photoBlocks').append(lp); // keep it safe while the form is rebuilt
   const box = $('fields'), box2 = $('fields2'); box.textContent = ''; box2.textContent = '';
@@ -1077,6 +1192,7 @@ function buildFields() {
   applyKeeps();
   applyMode();
   placeLocPic();
+  applyHidden();
 }
 let newMode = false;
 function applyMode() {
@@ -1125,7 +1241,7 @@ async function openDamper(label, force, focusName) {
   newMode = false; curLabel = label;
   if (!same) { draftKey = ''; resetForm(); el.value = label; }
   applyMode();
-  $('dTitle').textContent = label;
+  $('dTitle').textContent = label; setOpPill(label);
   showMissing(label); updateNav();
   showScreen(true);
   if (!(history.state && history.state.d)) history.pushState({ d: 1 }, '');
@@ -1146,7 +1262,7 @@ async function openNew(force) {
   homeScroll = window.scrollY;
   draftKey = ''; curLabel = '';
   newMode = true; resetForm(); applyMode(); $('missBox').hidden = true; $('navBar').style.display = 'none';
-  $('dTitle').textContent = 'New damper';
+  $('dTitle').textContent = 'New damper'; $('dOp').textContent = '';
   showScreen(true);
   if (!(history.state && history.state.d)) history.pushState({ d: 1 }, '');
   $('detailBody').scrollTop = 0;
@@ -1303,7 +1419,7 @@ function openQuick(n, name, dd, recs) {
       else if (/Collaborator/.test(o.type || '')) { const pp = (o.people && o.people[v]) || {}; const w = pp.id ? { id: pp.id } : { email: pp.email || v }; val = o.type === 'multipleCollaborators' ? [w] : w; }
       fields[colOf(f.key)] = val; fillVal = v; disp = v;
     }
-    const item = { id: crypto.randomUUID(), createdAt: Date.now(), label: n, fields, photos, recordId: rid, preset: true, status: 'pending', error: '' };
+    const item = { id: crypto.randomUUID(), createdAt: Date.now(), label: n, fields, photos, recordId: rid, preset: true, status: 'pending', error: '', base: cfg().base, tbl: tableRef(cfg()) };
     try { await putItem(item); } catch { toast('Could not save: phone storage may be full. Sync or free up space.'); return; }
     if (!pf) { // show the new value in the grid straight away
       const d = await loadDetail();
@@ -1327,7 +1443,10 @@ function renderGrid(list, groups, ctx) {
     ['chip', 'Operational Test', 130], ['text', 'Duct Width', 90], ['text', 'Duct Height', 90], ['note', 'Inspection Field Notes', 260],
     ['multi', 'Inspection Note - Select', 230], ['multi', 'Suggested Follow-up', 190], ['multi', 'Special Conditions - Inspections', 190],
     ['multi', 'Inspector(s)', 160], ['text', 'Inspection Date', 120],
-  ];
+  ].filter((c, i) => i === 0 || !hiddenCols().map(norm).includes(norm(c[1]))); // columns the Tech View hides are left out
+  const linkCols = ((dd && dd.links) || ['Building', 'Floor', 'Damper Type']).map(norm);
+  const icon = (kind, name) => kind === 'pic' ? '📎' : kind === 'chip' ? '◉' : kind === 'multi' ? (/inspector/i.test(name) ? '👤' : '☰') : kind === 'note' ? '≡'
+    : /date/i.test(name) ? '▦' : linkCols.includes(norm(name)) ? '⇢' : /width|height/i.test(name) ? '#' : 'A';
   const total = GC.reduce((a, c) => a + c[2], 0);
   const colIx = {}; for (const k of (dd && dd.order) || []) colIx[norm(k)] = k;
   const picKey = {}; // photo column -> real column name
@@ -1346,22 +1465,23 @@ function renderGrid(list, groups, ctx) {
   wrap.append(inner);
   const cell = (w, first) => { const c = document.createElement('div'); c.className = 'gc' + (first ? ' gfirst' : ''); c.style.width = w + 'px'; return c; };
   const head = document.createElement('div'); head.className = 'grow ghead';
-  GC.forEach((c, i) => { const h = cell(c[2], i === 0); h.textContent = c[1]; head.append(h); });
+  GC.forEach((c, i) => { const h = cell(c[2], i === 0); const ic = document.createElement('span'); ic.className = 'fi'; ic.textContent = icon(c[0], c[1]); h.append(ic, c[1]); h.title = c[1]; head.append(h); });
   inner.append(head);
   gridObs = new IntersectionObserver((es) => {
     for (const e of es) if (e.isIntersecting) {
       const im = e.target; gridObs.unobserve(im);
       caches.open('intake-photos').then((pc) => pc.match(PKEY + im.dataset.aid)).then(async (hit) => {
-        if (!hit) return; const u = URL.createObjectURL(await hit.blob()); gridUrls.push(u); im.src = u;
+        if (!hit) { if (navigator.onLine && im.dataset.u) im.src = im.dataset.u; return; } const u = URL.createObjectURL(await hit.blob()); gridUrls.push(u); im.src = u;
       }).catch(() => {});
     }
   }, { rootMargin: '200px' });
-  const mkRow = (n) => {
+  const mkRow = (n, ix) => {
     const rid = recs[n], r = document.createElement('div'); r.className = 'grow gbody';
     GC.forEach((c, i) => {
       const [kind, name, w] = c, d = cell(w, i === 0);
       d.onclick = () => (kind === 'id' ? openDamper(n) : openQuick(n, name, dd, recs));
       if (kind === 'id') {
+        if (ix != null) { const no = document.createElement('span'); no.className = 'gnum'; no.textContent = ix + 1; d.append(no); }
         if (flagged(n)) { const dot = document.createElement('span'); dot.className = 'rdot'; d.append(dot); }
         d.append(n.replace(/^.*· /, ''));
       } else if (kind === 'chip') {
@@ -1369,7 +1489,7 @@ function renderGrid(list, groups, ctx) {
       } else if (kind === 'pic') {
         const ps = ((dd && dd.pics) || {})[rid] || {}, key = Object.keys(ps).find((k) => norm(k) === picKey[name]), at = key ? ps[key] : [];
         if (at.length) {
-          const im = document.createElement('img'); im.dataset.aid = at[0].id; im.alt = ''; d.append(im); gridObs.observe(im);
+          const im = document.createElement('img'); im.dataset.aid = at[0].id; im.dataset.u = at[0].u || ''; im.alt = ''; d.append(im); gridObs.observe(im);
           if (at.length > 1) { const b = document.createElement('span'); b.className = 'gbadge'; b.textContent = at.length; d.append(b); }
         }
       } else if (kind === 'multi') {
@@ -1386,22 +1506,25 @@ function renderGrid(list, groups, ctx) {
           m.onclick = (e) => { e.stopPropagation(); const o = d.classList.toggle('open'); m.textContent = o ? 'less ▴' : 'more ▾'; };
           d.append(m);
         } });
+      } else if (linkCols.includes(norm(name))) { // linked records show as little tags, like in Airtable
+        const v = val(rid, name); d.title = v;
+        if (v) String(v).split(/,\s*/).filter(Boolean).forEach((x) => { const t = document.createElement('span'); t.className = 'lk'; t.textContent = x; d.append(t); });
       } else { const v = val(rid, name); d.textContent = v; d.title = v; }
       r.append(d);
     });
     return r;
   };
   for (const g of groups) {
-    if (g.flat) { const b0 = document.createElement('div'); g.items.forEach((n) => b0.append(mkRow(n))); inner.append(b0); continue; }
+    if (g.flat) { const b0 = document.createElement('div'); g.items.forEach((n, i) => b0.append(mkRow(n, i))); inner.append(b0); continue; }
     const gh = document.createElement('div'); gh.className = 'ggrp';
     const l = document.createElement('span'); l.className = 'gl'; l.append(document.createTextNode('▸ '));
-    if (g.op) l.append(chipEl(g.op)); else l.append(g.label);
-    const cn = document.createElement('span'); cn.className = 'cnt'; cn.textContent = g.items.length;
+    if (g.op) { const k = document.createElement('span'); k.className = 'gk'; k.textContent = 'Operational Test'; l.append(k, chipEl(g.op)); } else { l.append(g.label); l.style.fontWeight = '600'; l.style.color = 'var(--ink)'; l.style.fontSize = '14px'; }
+    const cn = document.createElement('span'); cn.className = 'gcount'; cn.append('Count'); const cb = document.createElement('b'); cb.textContent = g.items.length; cn.append(cb);
     gh.append(l, cn);
     const body = document.createElement('div');
     const open = (on) => {
       gh.classList.toggle('open', on); l.firstChild.textContent = on ? '▾ ' : '▸ ';
-      if (on && !body.childNodes.length) g.items.forEach((n) => body.append(mkRow(n)));
+      if (on && !body.childNodes.length) g.items.forEach((n, i) => body.append(mkRow(n, i)));
       body.hidden = !on;
     };
     gh.onclick = () => { const on = !gh.classList.contains('open'); if (on) openSet.add(g.key); else openSet.delete(g.key); open(on); };
@@ -1735,7 +1858,7 @@ $('form').addEventListener('submit', async (e) => {
   if (!photos.length && !Object.keys(fields).length) { toast('Add a photo or some notes first'); return; }
   const item = {
     id: crypto.randomUUID(), createdAt: Date.now(), label, fields, photos,
-    recordId: presetId, preset: !!presetId, status: 'pending', error: '',
+    recordId: presetId, preset: !!presetId, status: 'pending', error: '', base: cfg().base, tbl: tableRef(cfg()),
   };
   try { await putItem(item); }
   catch { toast('Could not save: phone storage may be full. Sync or free up space.'); return; }
@@ -1796,14 +1919,14 @@ async function sync(manual) {
       try {
         // 1) create the record once; remember its id so a retry never duplicates it
         if (!it.recordId) {
-          const res = await api(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}`,
+          const res = await api(`https://api.airtable.com/v0/${it.base || c.base}/${encodeURIComponent(it.tbl || tableRef(c))}`,
             { fields: (({ [FIELDS.find((f) => f.existing).key]: _, ...rest }) => rest)(it.fields), typecast: true });
           it.recordId = res.id; createdAny = true; it.dropped = dropped(it.fields, res); await putItem(it);
         } else if (it.preset && !it.patched) {
           // existing damper: fill in its row instead of creating a new one
           const body = { ...it.fields }; delete body[FIELDS.find((f) => f.existing).key];
           if (Object.keys(body).length) {
-            const res = await api(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}/${it.recordId}`,
+            const res = await api(`https://api.airtable.com/v0/${it.base || c.base}/${encodeURIComponent(it.tbl || tableRef(c))}/${it.recordId}`,
               { fields: body, typecast: true }, 'PATCH');
             it.dropped = dropped(body, res);
           }
@@ -1812,7 +1935,7 @@ async function sync(manual) {
         // 2) upload each photo that is not done yet, into its own attachment field
         for (const p of it.photos) {
           if (p.done) continue;
-          await api(`https://content.airtable.com/v0/${c.base}/${it.recordId}/${encodeURIComponent(p.field)}/uploadAttachment`,
+          await api(`https://content.airtable.com/v0/${it.base || c.base}/${it.recordId}/${encodeURIComponent(p.field)}/uploadAttachment`,
             { contentType: 'image/jpeg', filename: p.name, file: await b64(p.blob) });
           p.done = true; await putItem(it);
         }
@@ -1862,7 +1985,7 @@ async function render() {
       const tid = /^tbl/.test(c.table) ? c.table : localStorage.getItem('tid');
       if (tid) {
         const a = document.createElement('a');
-        a.href = `https://airtable.com/${c.base}/${tid}/${it.recordId}`;
+        a.href = `https://airtable.com/${it.base || c.base}/${it.base && it.base !== c.base ? (it.tbl || tid) : tid}/${it.recordId}`;
         a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Open in Airtable';
         a.style.color = 'var(--brand)'; rid.append(a);
       } else rid.textContent = 'Airtable record ' + it.recordId;
@@ -2110,6 +2233,195 @@ function autoRefresh(minAge) {
 setInterval(() => autoRefresh(AUTO_REFRESH_MS), 5 * 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { sync(); autoRefresh(5 * 1000); } });
 document.addEventListener('close', () => setTimeout(() => autoRefresh(AUTO_REFRESH_MS), 500), true); // a refresh that came due while a window was open runs when it closes
+
+/* ---------- Jobs: every damper base the token can open, and which ones are kept on this phone ---------- */
+async function setOpPill(label) {
+  const el = $('dOp'); el.textContent = '';
+  const ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key] || {}, rid = (o.recs || {})[label], d = await loadDetail();
+  const v = ((d && d.fill && d.fill[rid]) || {})['Operational Test'];
+  if (v && curLabel === label) el.append(chipEl(v));
+}
+const BASE_HIDE = /\bHR\b|receipt|training|payroll|personnel|🔒/i; // never shown, never stored
+const BASE_OLD = /archiv|restored|\bold\b|copy|template|import|\btest/i; // behind "Show older jobs"
+const CATS = [['Dampers', /damper/i], ['Doors', /door/i], ['Above Ceiling', /ceiling/i], ['Repairs', /repair/i]];
+const JOB_KEYS = ['names', 'opts', 'tid', 'vname', 'noPics', 'listsAt', 'hidden', 'schema', 'sel_bld', 'sel_flr', 'sel_op', 'err_refresh', 'err_photos', 'autoView'];
+const JKEY = (b) => 'https://local.invalid/job/' + b;
+const offMap = () => getJ('offline') || {};
+const setOffMap = (m) => { try { localStorage.setItem('offline', JSON.stringify(m)); } catch {} };
+const isOffline = (b) => !!offMap()[b];
+const recentMap = () => getJ('recent') || {};
+const pins = () => getJ('pins') || [];
+const fmtSize = (b) => (b < 1e6 ? Math.max(1, Math.round(b / 1e3)) + ' KB' : (b / 1e6).toFixed(b < 1e7 ? 1 : 0) + ' MB');
+const basesList = () => ((getJ('bases') || {}).list || []).filter((b) => !BASE_HIDE.test(b.name));
+function jobName(b) { const r = recentMap()[b], l = basesList().find((x) => x.id === b); return (l && l.name) || (r && r.name) || 'This job'; }
+function setJobBar() {
+  const c = cfg(), o = offMap()[c.base], btn = $('btnOffline');
+  $('jobName').textContent = jobName(c.base);
+  btn.textContent = !o ? '⬇ Offline' : o.mode === 'today' ? '✓ Today' : '✓ Kept';
+  btn.classList.toggle('on', !!o);
+}
+function showJobs(on) {
+  $('projects').hidden = !on; $('home').hidden = on; $('btnNew').hidden = on;
+  window.scrollTo(0, 0);
+  if (on) { renderJobs(); loadBases(); }
+}
+let basesBusy = false;
+async function loadBases(manual) {
+  const c = cfg();
+  if (!c.token || !navigator.onLine || basesBusy) { if (manual && !navigator.onLine) toast('Needs a connection'); renderJobs(); return; }
+  basesBusy = true;
+  try {
+    const out = []; let off = '', err = 0;
+    for (let i = 0; i < 30; i++) {
+      const r = await airtableGet('https://api.airtable.com/v0/meta/bases' + (off ? '?offset=' + encodeURIComponent(off) : ''), { headers: { Authorization: 'Bearer ' + c.token } });
+      if (!r.ok) { err = r.status; break; }
+      const j = await r.json();
+      for (const b of j.bases || []) if (!BASE_HIDE.test(b.name)) out.push({ id: b.id, name: b.name });
+      if (!j.offset) break; off = j.offset;
+    }
+    if (out.length) localStorage.setItem('bases', JSON.stringify({ at: Date.now(), list: out }));
+    else if (err && manual) toast('Could not load jobs (error ' + err + ')');
+  } catch { if (manual) toast('Could not load jobs'); }
+  basesBusy = false;
+  renderJobs(); setJobBar();
+}
+let pCat = '', pOld = false;
+function renderJobs() {
+  if ($('projects').hidden) return;
+  const c = cfg(), q = norm($('pSearch').value), offs = offMap(), rec = recentMap(), pn = pins();
+  let all = basesList();
+  if (!all.some((b) => b.id === c.base)) all = [{ id: c.base, name: jobName(c.base) }, ...all];
+  const jn = (n) => { const m = String(n).match(/^\s*(\d{3,6})/); return m ? +m[1] : -1; };
+  all.sort((a, b) => jn(b.name) - jn(a.name) || a.name.localeCompare(b.name));
+  // chips
+  const cats = $('pCats'); cats.textContent = '';
+  [['', 'All'], ...CATS.map((x) => [x[0], x[0]])].forEach(([k, t]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'pcat' + (pCat === k ? ' on' : ''); b.textContent = t;
+    b.onclick = () => { pCat = k; renderJobs(); }; cats.append(b);
+  });
+  const catRe = pCat && CATS.find((x) => x[0] === pCat)[1];
+  let olds = 0;
+  const shown = all.filter((b) => {
+    if (catRe && !catRe.test(b.name)) return false;
+    if (q && !norm(b.name).includes(q) && !norm(b.id).includes(q)) return false;
+    if (!q && !pOld && BASE_OLD.test(b.name) && b.id !== c.base && !offs[b.id] && !pn.includes(b.id)) { olds++; return false; }
+    return true;
+  });
+  $('pCount').textContent = shown.length + (shown.length === 1 ? ' job' : ' jobs');
+  const list = $('pList'); list.textContent = '';
+  const msg = $('pMsg');
+  msg.hidden = basesList().length > 0; msg.textContent = c.token ? (navigator.onLine ? 'Loading jobs…' : 'Connect to see all jobs.') : 'Add your Airtable token in Settings to see your jobs.';
+  const card = (b) => {
+    const o = offs[b.id], d = document.createElement('div'); d.className = 'job' + (b.id === c.base ? ' cur' : '');
+    const cat = CATS.find((x) => x[1].test(b.name)), sq = document.createElement('div'); sq.className = 'jsq';
+    sq.style.background = { Dampers: '#2d7ff9', Doors: '#8b46ff', 'Above Ceiling': '#06a09b', Repairs: '#d74d26' }[cat && cat[0]] || '#666';
+    sq.textContent = { Dampers: 'D', Doors: 'Dr', 'Above Ceiling': 'AC', Repairs: 'R' }[cat && cat[0]] || (b.name.trim()[0] || '?').toUpperCase();
+    const t = document.createElement('div'); t.className = 'jt';
+    const nm = document.createElement('b'); nm.textContent = b.name;
+    const sub = document.createElement('span');
+    if (o) { sub.className = 'joff'; sub.textContent = (o.mode === 'today' ? '✓ Offline today' : '✓ Kept offline') + (o.bytes ? ' · ' + fmtSize(o.bytes) : ''); }
+    else sub.textContent = b.id === c.base ? 'Open now' : rec[b.id] ? 'Opened ' + new Date(rec[b.id].t).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+    t.append(nm, sub);
+    const star = document.createElement('button'); star.type = 'button'; star.className = 'jbtn' + (pn.includes(b.id) ? ' on' : ''); star.textContent = pn.includes(b.id) ? '★' : '☆'; star.setAttribute('aria-label', 'Pin');
+    star.onclick = (e) => { e.stopPropagation(); const p = pins(), i = p.indexOf(b.id); if (i < 0) p.unshift(b.id); else p.splice(i, 1); localStorage.setItem('pins', JSON.stringify(p)); renderJobs(); };
+    const dl = document.createElement('button'); dl.type = 'button'; dl.className = 'jbtn'; dl.textContent = o ? '✓' : '⬇'; dl.style.color = o ? '#1a7f4b' : ''; dl.setAttribute('aria-label', 'Use offline');
+    dl.onclick = (e) => { e.stopPropagation(); openOff(b.id, b.name); };
+    d.append(sq, t, star, dl);
+    d.onclick = () => switchJob(b.id, b.name);
+    return d;
+  };
+  const sec = (title, arr, max) => {
+    if (!arr.length) return;
+    const h = document.createElement('div'); h.className = 'psec'; h.textContent = title; list.append(h);
+    arr.slice(0, max || arr.length).forEach((b) => list.append(card(b)));
+    if (max && arr.length > max) { const m = document.createElement('p'); m.className = 'hint'; m.style.textAlign = 'center'; m.textContent = (arr.length - max) + ' more. Search to find them.'; list.append(m); }
+  };
+  if (q || pCat) sec('Results', shown, 150);
+  else {
+    const pinned = shown.filter((b) => pn.includes(b.id));
+    const recent = shown.filter((b) => rec[b.id] && !pn.includes(b.id)).sort((a, b) => rec[b.id].t - rec[a.id].t).slice(0, 5);
+    const used = new Set([...pinned, ...recent].map((b) => b.id));
+    sec('Pinned', pinned); sec('Recent', recent); sec('All jobs', shown.filter((b) => !used.has(b.id)), 150);
+  }
+  if (olds || pOld) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'secondary'; b.style.cssText = 'display:block;margin:12px auto 0';
+    b.textContent = pOld ? 'Hide older jobs' : 'Show older jobs (' + olds + ')'; b.onclick = () => { pOld = !pOld; renderJobs(); }; list.append(b);
+  }
+  const st = $('pStore');
+  if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then((e) => { st.textContent = 'This app is using ' + fmtSize(e.usage || 0) + ' on this phone.'; }).catch(() => {});
+}
+async function snapJob(b) {
+  const ls = {}; for (const k of JOB_KEYS) { const v = localStorage.getItem(k); if (v != null) ls[k] = v; }
+  const c = cfg();
+  await (await caches.open('intake-jobs')).put(JKEY(b), new Response(JSON.stringify({ ls, table: c.table, view: c.view, idField: c.idField, detail: await loadDetail() })));
+}
+async function loadSnap(b) { try { const r = await (await caches.open('intake-jobs')).match(JKEY(b)); return r ? await r.json() : null; } catch { return null; } }
+async function dropSnap(b) { try { await (await caches.open('intake-jobs')).delete(JKEY(b)); } catch {} }
+let switching = false;
+async function switchJob(base, name) {
+  const c = cfg();
+  if (base === c.base) { showJobs(false); return; }
+  if (switching) return; switching = true;
+  try {
+    for (let i = 0; i < 150 && refreshing; i++) await new Promise((r) => setTimeout(r, 200)); // let a refresh of the old job finish first
+    if (isOffline(c.base)) await snapJob(c.base).catch(() => {}); // keep what this phone has for the job we are leaving
+    const snap = isOffline(base) ? await loadSnap(base) : null;
+    for (const k of JOB_KEYS) localStorage.removeItem(k);
+    try { await (await caches.open('intake-data')).delete(DKEY); } catch {}
+    if (snap) { for (const [k, v] of Object.entries(snap.ls || {})) localStorage.setItem(k, v); if (snap.detail) await saveDetail(snap.detail); }
+    else localStorage.setItem('autoView', '1');
+    localStorage.setItem('cfg', JSON.stringify({ ...JSON.parse(localStorage.getItem('cfg') || '{}'), base, table: snap ? snap.table : SURVEY_TABLE, view: snap ? snap.view || '' : '', idField: snap ? snap.idField || '' : '' }));
+    const r = recentMap(); r[base] = { name: name || jobName(base), t: Date.now() }; localStorage.setItem('recent', JSON.stringify(r));
+    lastFilled = {};
+    buildFields(); showPhotoBlocks(); fillMainView(); setJobBar(); showJobs(false); renderHome(); updateMsgDot(); netState();
+    if (navigator.onLine) refreshOptions(true); else if (!snap) report('This job is not saved on this phone. Connect to load it.', true);
+  } finally { switching = false; }
+}
+let offTarget = null;
+function openOff(base, name) {
+  offTarget = { base, name: name || jobName(base) };
+  const o = offMap()[base];
+  $('offTitle').textContent = 'Use ' + offTarget.name + ' offline';
+  $('offHint').textContent = o ? (o.mode === 'today' ? 'Saved on this phone for today' : 'Saved on this phone until you remove it') + (o.bytes ? ' (' + fmtSize(o.bytes) + ')' : '') + '. Only the fields in its Tech View and small copies of its photos are saved.'
+    : 'Saves this job\'s dampers (only the fields in its Tech View) and small copies of its photos on this phone, so it works without signal.';
+  $('offToday').classList.toggle('secondary', !!o && o.mode !== 'today');
+  $('offKeep').classList.toggle('secondary', !o || o.mode !== 'keep');
+  $('offRemove').hidden = !o;
+  $('offDlg').showModal();
+}
+async function markOffline(mode) {
+  const t = offTarget; $('offDlg').close(); if (!t) return;
+  const m = offMap(); m[t.base] = { ...(m[t.base] || {}), mode, day: today(), name: t.name }; setOffMap(m);
+  setJobBar(); renderJobs();
+  if (t.base !== cfg().base) { await switchJob(t.base, t.name); return; }
+  if (navigator.onLine) { toast('Saving this job on your phone…'); refreshOptions(true); } else toast('Connect to finish saving this job');
+}
+async function removeOffline(base) {
+  const m = offMap(); delete m[base]; setOffMap(m);
+  const cur = base === cfg().base, d = cur ? await loadDetail() : ((await loadSnap(base)) || {}).detail;
+  const ids = []; for (const r of Object.values((d && d.pics) || {})) for (const l of Object.values(r)) for (const a of l) ids.push(a.id);
+  try { const pc = await caches.open('intake-photos'); await Promise.all(ids.map((id) => pc.delete(PKEY + id))); } catch {}
+  if (!cur) await dropSnap(base);
+  setJobBar(); renderJobs(); if (cur) renderHome();
+}
+// "Today only" jobs clear themselves the next day
+function expireOffline() { for (const [b, o] of Object.entries(offMap())) if (o.mode === 'today' && o.day !== today()) removeOffline(b); }
+$('offToday').onclick = () => markOffline('today');
+$('offKeep').onclick = () => markOffline('keep');
+$('offRemove').onclick = async () => { const t = offTarget; $('offDlg').close(); if (t) { await removeOffline(t.base); toast('Removed from this phone'); } };
+$('offCancel').onclick = () => $('offDlg').close();
+$('btnOffline').onclick = () => openOff(cfg().base);
+$('btnJobs').onclick = () => showJobs(true);
+$('btnBases').onclick = () => loadBases(true);
+$('pSearch').oninput = () => renderJobs();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) expireOffline(); });
+// first start with this version: photos already saved on the phone belong to the job in use, so keep them
+if (localStorage.getItem('offline') == null) {
+  setOffMap({});
+  caches.open('intake-photos').then((pc) => pc.keys()).then((ks) => { if (ks.length) { const m = offMap(); m[cfg().base] = { mode: 'keep', day: today(), name: '' }; setOffMap(m); setJobBar(); } }).catch(() => {});
+}
+expireOffline(); setJobBar();
+if (!getJ('bases')) setTimeout(() => loadBases(), 3000); // learn the job names once
 
 updateMsgDot(); buildFields(); buildPhotos(); netState(); render(); fillMainView(); renderHome(); sync(); refreshOptions();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
