@@ -773,7 +773,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-29-q (test copy)';
+const APP_VERSION = '2026-10-29-r (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1147,9 +1147,13 @@ function chipEl(v) {
 function pillEl(v, f) {
   const o = getOpts()[f.key] || {};
   if (!/Collaborator/.test(o.type || '')) return chipEl(v);
-  const c = document.createElement('span'); c.className = 'chip'; c.style.background = 'var(--line)'; c.style.color = 'var(--ink)';
-  let h = 0; for (const ch of String(v)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  const av = document.createElement('span'); av.className = 'av'; av.style.background = ['#2d7ff9', '#8b46ff', '#06a09b', '#d74d26', '#b2158b', '#338a17'][h % 6]; av.textContent = String(v).trim()[0] || '?';
+  // each person gets their own color: the n-th person in the list gets the n-th color, so no two look alike
+  const P = ['blue', 'purple', 'teal', 'orange', 'pink', 'green', 'red', 'cyan', 'yellow', 'gray'];
+  let i = (o.choices || []).indexOf(String(v));
+  if (i < 0) { let h = 0; for (const ch of String(v)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; i = h; }
+  const col = P[i % P.length], c = document.createElement('span'); c.className = 'chip';
+  c.style.background = AT_COLORS[col + 'Light2']; c.style.color = '#1b1f24';
+  const av = document.createElement('span'); av.className = 'av'; av.style.background = AT_COLORS[col + 'Dark1']; av.textContent = String(v).trim()[0] || '?';
   c.append(av, String(v)); return c;
 }
 const pickedOf = (el, f) => { if (f.multi) { try { const a = JSON.parse(el.dataset.sel || '[]'); if (a.length) return a; } catch {} return el.value ? el.value.split(', ') : []; } return el.value ? [el.value] : []; };
@@ -1574,7 +1578,8 @@ function renderGrid(list, groups, ctx) {
         if (arr == null) arr = val(rid, name) ? String(val(rid, name)).split(/,\s*/) : [];
         if (!Array.isArray(arr)) arr = [arr];
         d.style.gap = '4px'; d.title = arr.map((x) => rev[x] || x).join(', ');
-        arr.forEach((x) => { const c = document.createElement('span'); c.className = 'chip'; c.style.maxWidth = '170px'; c.style.background = 'var(--bg)'; c.style.border = '1px solid var(--line)'; c.style.color = 'var(--ink)'; c.textContent = rev[x] || x; d.append(c); });
+        const ff = FIELDS.find((x) => norm(x.key) === norm(name));
+        arr.forEach((x) => { const c = pillEl(rev[x] || x, ff); c.style.maxWidth = '170px'; d.append(c); });
       } else if (kind === 'note') { // the whole note when it fits in the row; longer ones get "more" to open them right here
         const v = val(rid, name); d.classList.add('gnote'); if (!v) { r.append(d); return; }
         const t = document.createElement('div'); t.className = 'nt'; t.textContent = v; d.append(t);
