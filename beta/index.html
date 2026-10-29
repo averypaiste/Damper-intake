@@ -63,6 +63,7 @@
   dialog::backdrop { background:rgba(0,0,0,.5); }
   #picker[open] { display:flex; flex-direction:column; height:85vh; height:85dvh; max-height:85vh; max-height:85dvh; padding:14px; overflow:hidden; }
   #picker h2 { margin:0 0 8px; }
+  #pkList:focus { outline:0; }
   #pkList { flex:1 1 auto; min-height:0; overflow-y:auto; margin:8px 0; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; touch-action:pan-y; }
   #pkFilters, #pkSearch, #pkClose { flex:0 0 auto; }
   .pkitem { display:block; width:100%; text-align:left; background:transparent; color:var(--ink); border:0; border-bottom:1px solid var(--line); border-radius:0; padding:14px 6px; font-weight:500; }
@@ -536,6 +537,7 @@ const delItem = (id) => tx('readwrite', (s) => s.delete(id));
 const allItems = () => tx('readonly', (s) => s.getAll()).then((r) => (r || []).sort((a, b) => b.createdAt - a.createdAt));
 
 /* ---------- Searchable picker for long lists ---------- */
+const TYPE_FIRST = ['Inspection Note - Select', 'Suggested Follow-up'];
 function openPicker(f, target) {
   const o = getOpts()[f.key];
   let all = (o && o.choices) || [];
@@ -597,7 +599,11 @@ function openPicker(f, target) {
   };
   list.scrollTop = 0;
   search.value = ''; search.oninput = () => draw(); bSel.onchange = () => draw(); fSel.onchange = () => draw(); draw();
+  // most lists open ready to tap; only the long note lists start in the search box with the keyboard up
+  const typeFirst = TYPE_FIRST.some((k) => norm(k) === norm(f.key));
+  list.tabIndex = -1; list.toggleAttribute('autofocus', !typeFirst); search.toggleAttribute('autofocus', typeFirst);
   dlg.showModal();
+  if (!typeFirst) { search.blur(); list.focus({ preventScroll: true }); }
 }
 $('pkClose').onclick = () => $('picker').close();
 
@@ -767,7 +773,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-29-o (test copy)';
+const APP_VERSION = '2026-10-29-p (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
