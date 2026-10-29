@@ -163,7 +163,7 @@
   <section id="home">
     <div class="card">
       <div hidden><select id="mView"><option value="">All dampers in this table</option></select></div>
-      <label for="mTable" style="margin-top:0">Table</label>
+      <label for="mTable" style="margin-top:0">View</label>
       <select id="mTable" style="margin-bottom:12px"></select>
       <div class="row" style="margin-bottom:12px">
         <button type="button" class="secondary small" id="btnNew">+ New damper</button>
@@ -176,9 +176,9 @@
         <select id="hFlr" aria-label="Floor"></select>
         <select id="hIns" aria-label="Inspector"></select>
         <select id="hView" aria-label="Layout"><option value="status">Sort by status</option><option value="all">All Dampers</option></select>
+        <button type="button" class="secondary small" id="hMiss" hidden style="margin:0;font-size:13px;padding:6px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></button>
       </div>
       <input id="hSearch" type="search" placeholder="Search dampers…" autocomplete="off" autocapitalize="off" spellcheck="false">
-      <button type="button" class="secondary small" id="hMiss" hidden style="margin-top:8px"></button>
       <p class="hint" id="hCount" style="margin:8px 0 0"></p>
       <div id="dlist"></div>
     </div>
@@ -643,7 +643,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-28-a';
+const APP_VERSION = '2026-10-29-a';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1457,8 +1457,9 @@ async function renderHome() {
   const nMiss = all.filter((n, i) => inScope(n, i) && flagged(n)).length;
   if (!nMiss) onlyMiss = false;
   $('hMiss').hidden = !nMiss; $('hMiss').textContent = '';
-  if (onlyMiss) $('hMiss').append('✕ Showing only the ' + nMiss + ' with missing/incomplete info. Tap to show all.');
-  else { const w = document.createElement('span'); w.className = 'rdot'; $('hMiss').append(w, nMiss + ' with missing/incomplete info. Tap to show only those.'); }
+  $('hMiss').title = onlyMiss ? 'Showing only dampers with missing/incomplete info. Tap to show all.' : 'Tap to show only dampers with missing/incomplete info.';
+  if (onlyMiss) $('hMiss').append('✕ Missing only (' + nMiss + ')');
+  else { const w = document.createElement('span'); w.className = 'rdot'; $('hMiss').append(w, nMiss + ' missing info'); }
   const hits = all.filter((n, i) => (!onlyMiss || flagged(n)) && inScope(n, i));
   const list = $('dlist'); list.textContent = '';
   const opOf0 = (n) => ((fillAll[recs[n]] || {})['Operational Test']) || '';
@@ -1877,26 +1878,35 @@ function fillMainView() {
   list.forEach((n) => sel.append(new Option(n, n)));
   sel.value = want;
 }
-// Picker at the top of the main page: the views of the Damper Survey table (the same list Settings > Show tables
-// shows under it), plus these extra tables
+// Picker at the top of the main page: the "TECH Views" section of the Damper Survey table, as in Airtable.
+// Airtable does not tell apps which section a view is in, but it lists views in sidebar order, so the section is
+// the run of views that starts at the first "Tech" view and continues while names have "Tech" in them (or are in EXTRA_VIEWS).
 const SURVEY_TABLE = 'Damper Survey';
-const MAIN_TABLES = ['AVERY APP TESTING'];
+const EXTRA_VIEWS = ['AVERY APP TESTING'];
 const surveyTable = () => getSchema().find((t) => norm(t.name) === norm(SURVEY_TABLE)) || getSchema().find((t) => norm(t.name).includes(norm(SURVEY_TABLE)));
+function techViews(t) {
+  const vs = (t && t.views) || [], isTech = (v) => /tech/i.test(v.name) || EXTRA_VIEWS.some((n) => norm(n) === norm(v.name));
+  const i = vs.findIndex((v) => /tech/i.test(v.name)); if (i < 0) return [];
+  const out = []; for (let j = i; j < vs.length && isTech(vs[j]); j++) out.push(vs[j]);
+  return out;
+}
 function fillMainTable() {
   const sel = $('mTable'), c = cfg(), cur = findTable(c.table || ''), st = surveyTable();
   sel.textContent = '';
-  if (st) for (const v of viewsFor(st)) sel.append(new Option(v.name, 'v|' + st.name + '|' + v.name));
-  for (const n of MAIN_TABLES) { const t = findTable(n); if (t) sel.append(new Option(t.name, 't|' + t.name)); }
-  const want = cur ? (c.view ? 'v|' + cur.name + '|' + c.view : 't|' + cur.name) : '';
-  if (want && ![...sel.options].some((o) => o.value === want)) sel.append(new Option(c.view || cur.name, want)); // keep the one in use even if it is not in the list
+  if (st) for (const v of techViews(st)) sel.append(new Option(v.name, 'v|' + st.name + '|' + v.name));
+  // a view name typed where the table goes (as Settings allows) counts as that view of the Damper Survey table
+  const asView = !cur && st && (st.views || []).find((v) => norm(v.name) === norm(c.table || ''));
+  const want = cur ? (c.view ? 'v|' + cur.name + '|' + c.view : 't|' + cur.name) : asView ? 'v|' + st.name + '|' + asView.name : '';
+  if (want && ![...sel.options].some((o) => o.value === want)) sel.append(new Option(c.view || (asView && asView.name) || cur.name, want)); // keep the one in use even if it is not in the list
   if (!sel.options.length) sel.append(new Option(c.table || 'Tap Refresh lists to load the list', ''));
   sel.value = want;
 }
 $('mTable').onchange = async () => {
   const c = cfg(), [kind, table, view = ''] = $('mTable').value.split('|');
   if (!kind) return;
-  const cur = findTable(c.table || '');
-  if (cur && cur.name === table && (c.view || '') === view) return;
+  let cur = findTable(c.table || ''), curView = c.view || '';
+  if (!cur) { const st = surveyTable(), v = st && (st.views || []).find((x) => norm(x.name) === norm(c.table || '')); if (v) { cur = st; curView = v.name; } }
+  if (cur && cur.name === table && curView === view) return;
   // entries still waiting belong to the current table: send them before switching, or they would go to the wrong one
   if ((!cur || cur.name !== table) && (await allItems()).some((i) => i.status !== 'synced')) { fillMainTable(); toast('Some entries are still waiting to sync. Sync them first, then switch.'); return; }
   saveCfg({ ...c, table, view, idField: '' });
