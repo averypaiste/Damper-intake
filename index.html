@@ -643,7 +643,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-29-a';
+const APP_VERSION = '2026-10-29-b';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1097,7 +1097,6 @@ function focusField(name) {
   }, 120);
 }
 async function openDamper(label, force, focusName) {
-  openSet.clear();
   const ef = FIELDS.find((f) => f.existing), el = $(fid(ef.key)), o = getOpts()[ef.key] || {};
   homeScroll = window.scrollY;
   const same = !force && !newMode && el.value === label;
@@ -1122,7 +1121,6 @@ async function openDamper(label, force, focusName) {
   focusField(focusName);
 }
 async function openNew(force) {
-  openSet.clear();
   homeScroll = window.scrollY;
   draftKey = ''; curLabel = '';
   newMode = true; resetForm(); applyMode(); $('missBox').hidden = true; $('navBar').style.display = 'none';
@@ -1393,13 +1391,13 @@ function updateNav() {
 function navGo(d) { const i = navList.indexOf(curLabel) + d; if (i >= 0 && i < navList.length) openDamper(navList[i]); }
 function goBack() { if (history.state && history.state.d) history.back(); else goHome(); }
 addEventListener('popstate', () => { if ($('detail').open) $('detail').close(); });
-$('detail').addEventListener('close', () => { openSet.clear(); saveDraft(); newMode = false; applyMode(); if (history.state && history.state.d) history.back(); });
+$('detail').addEventListener('close', () => { saveDraft(); newMode = false; applyMode(); if (history.state && history.state.d) history.back(); });
 $('btnBack').onclick = goBack;
 $('btnNew').onclick = () => openNew();
 
 // The list of dampers on the first screen (building and floor dropdowns, search, and a marker for entries still waiting)
 let homeSeq = 0, onlyMiss = false;
-const openSet = new Set(); // menus opened by the person; cleared whenever a damper page is opened, so they are closed again on return
+const openSet = new Set(); // menus opened by the person; they stay open (also after visiting a damper) until the person closes them
 // Top-bar Sort button: off -> newest first -> oldest first -> off
 let dateSort = (() => { try { return localStorage.getItem('dsort') || ''; } catch { return ''; } })();
 function showSortLabel() { $('btnSort').textContent = dateSort === 'desc' ? 'Date ↓' : dateSort === 'asc' ? 'Date ↑' : 'Sort'; }
@@ -2037,15 +2035,18 @@ $('msgClose').onclick = () => $('msgDlg').close();
 function netState() { const on = navigator.onLine; $('net').textContent = on ? 'Online' : 'Offline'; document.querySelector('header').classList.toggle('off', !on); }
 addEventListener('online', () => { netState(); sync(); refreshOptions(); });
 addEventListener('offline', netState);
-// Keep the lists fresh while online: every 5 minutes, and when the app is opened again after 2 minutes away.
-// Not while a damper page is open, so nothing on the form moves while someone is filling it in.
+// Keep the lists fresh while online: every 30 seconds, whenever the connection comes back, and whenever the app is
+// opened again. Each refresh is about a dozen Airtable requests and Airtable allows 5 a second per base for everyone
+// together, so going much faster would slow things down once several people use the app at once.
+// Not while a damper page or any other window is open, so nothing moves while someone is filling it in.
+const AUTO_REFRESH_MS = 30 * 1000;
 function autoRefresh(minAge) {
-  if (!navigator.onLine || document.hidden || $('detail').open || syncing || Date.now() - lastRefresh < minAge) return;
+  if (!navigator.onLine || document.hidden || document.querySelector('dialog[open]') || syncing || Date.now() - lastRefresh < minAge) return;
   refreshOptions();
 }
-setInterval(() => autoRefresh(5 * 60 * 1000), 60 * 1000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { sync(); autoRefresh(2 * 60 * 1000); } });
-$('detail').addEventListener('close', () => setTimeout(() => autoRefresh(5 * 60 * 1000), 500));
+setInterval(() => autoRefresh(AUTO_REFRESH_MS), 5 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { sync(); autoRefresh(5 * 1000); } });
+document.addEventListener('close', () => setTimeout(() => autoRefresh(AUTO_REFRESH_MS), 500), true); // a refresh that came due while a window was open runs when it closes
 
 updateMsgDot(); buildFields(); buildPhotos(); netState(); render(); fillMainView(); renderHome(); sync(); refreshOptions();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
