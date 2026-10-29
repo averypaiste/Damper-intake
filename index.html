@@ -126,6 +126,10 @@
   .vrow button { flex:0 0 44px; height:44px; padding:0; font-size:20px; margin:0; }
   .fchips { display:flex; flex-wrap:nowrap; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; margin:10px 0; padding-bottom:2px; scrollbar-width:none; }
   .fchips::-webkit-scrollbar { display:none; }
+  .fwrap { position:relative; flex:0 0 auto; display:inline-flex; }
+  .fwrap select.on { padding-right:34px; background-image:none; }
+  .fwrap .fx { display:none; position:absolute; right:4px; top:50%; transform:translateY(-50%); width:26px; height:26px; min-height:0; padding:0; margin:0; border:0; border-radius:50%; background:var(--brand); color:#fff; font-size:13px; line-height:26px; text-align:center; }
+  .fwrap select.on + .fx { display:block; }
   .fchips select.on { border-color:var(--brand); color:var(--brand); font-weight:600; }
   .fchips select, .chipf { flex:0 0 auto; width:auto; margin:0; border:1px solid var(--line); border-radius:99px; padding:6px 26px 6px 12px; font-size:14px; background:var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23667085'/%3E%3C/svg%3E") no-repeat right 10px center; color:var(--ink); -webkit-appearance:none; appearance:none; min-height:0; height:34px; }
   .chipf { padding:6px 12px; background:var(--card); font-weight:600; cursor:pointer; white-space:nowrap; }
@@ -661,7 +665,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-29-i';
+const APP_VERSION = '2026-10-29-j';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1559,6 +1563,14 @@ async function renderHome() {
 $('hMiss').onclick = () => { onlyMiss = !onlyMiss; renderHome(); };
 $('hIns').onchange = () => renderHome(); $('hBld').onchange = () => { try { localStorage.setItem('sel_bld', $('hBld').value); localStorage.setItem('sel_flr', ''); } catch {} $('hFlr').value = ''; renderHome(); };
 $('navPrev').onclick = () => navGo(-1); $('navNext').onclick = () => navGo(1);
+// a small ✕ on any chip that is set, to go straight back to "all"
+['hBld', 'hFlr', 'hIns', 'hSort', 'hOp'].forEach((k) => {
+  const sel = $(k), w = document.createElement('span'); w.className = 'fwrap';
+  sel.replaceWith(w); w.append(sel);
+  const x = document.createElement('button'); x.type = 'button'; x.className = 'fx'; x.textContent = '✕'; x.setAttribute('aria-label', 'Clear ' + (sel.getAttribute('aria-label') || ''));
+  x.onclick = (e) => { e.stopPropagation(); sel.value = ''; sel.dispatchEvent(new Event('change')); };
+  w.append(x);
+});
 $('hOp').onchange = () => { try { localStorage.setItem('sel_op', $('hOp').value); } catch {} renderHome(); };
 $('hFlr').onchange = () => { try { localStorage.setItem('sel_flr', $('hFlr').value); } catch {} renderHome(); }; $('hSearch').oninput = () => renderHome();
 function buildPhotos() {
