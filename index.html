@@ -126,6 +126,7 @@
   .vrow button { flex:0 0 44px; height:44px; padding:0; font-size:20px; margin:0; }
   .fchips { display:flex; flex-wrap:nowrap; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; margin:10px 0; padding-bottom:2px; scrollbar-width:none; }
   .fchips::-webkit-scrollbar { display:none; }
+  .fchips select.on { border-color:var(--brand); color:var(--brand); font-weight:600; }
   .fchips select, .chipf { flex:0 0 auto; width:auto; margin:0; border:1px solid var(--line); border-radius:99px; padding:6px 26px 6px 12px; font-size:14px; background:var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23667085'/%3E%3C/svg%3E") no-repeat right 10px center; color:var(--ink); -webkit-appearance:none; appearance:none; min-height:0; height:34px; }
   .chipf { padding:6px 12px; background:var(--card); font-weight:600; cursor:pointer; white-space:nowrap; }
   .chipf.miss { border-color:#f04438; color:#b42318; }
@@ -193,8 +194,8 @@
         <select id="hBld" aria-label="Building"></select>
         <select id="hFlr" aria-label="Floor"></select>
         <select id="hIns" aria-label="Inspector"></select>
-        <select id="hSort" aria-label="Sort by date"><option value="">Date</option><option value="desc">Date: newest</option><option value="asc">Date: oldest</option></select>
-        <select id="hView" aria-label="Layout"><option value="status">By status</option><option value="all">All dampers</option></select>
+        <select id="hSort" aria-label="Inspection date"></select>
+        <select id="hOp" aria-label="Operational test result"></select>
       </div>
       <div class="sbar"><input id="hSearch" type="search" placeholder="🔍 Search dampers…" autocomplete="off" autocapitalize="off" spellcheck="false"><span id="hCount"></span></div>
       <div id="dlist"></div>
@@ -660,7 +661,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-29-f';
+const APP_VERSION = '2026-10-29-g';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1425,7 +1426,6 @@ let homeSeq = 0, onlyMiss = false;
 const openSet = new Set(); // menus opened by the person; they stay open (also after visiting a damper) until the person closes them
 let dateSort = (() => { try { return localStorage.getItem('dsort') || ''; } catch { return ''; } })();
 // Date sort, in the filter boxes above search: any order (grouped by status) / newest first / oldest first
-$('hSort').value = dateSort;
 $('hSort').onchange = () => {
   dateSort = $('hSort').value;
   try { localStorage.setItem('dsort', dateSort); } catch {}
@@ -1467,6 +1467,25 @@ async function renderHome() {
   const iSel = $('hIns');
   { const cur = iSel.value; iSel.textContent = ''; iSel.append(new Option('Inspector', '')); insNames.forEach((v) => iSel.append(new Option(v, v))); if (insNames.length) iSel.append(new Option('No inspector yet', '__none')); iSel.value = [...insNames, '__none'].includes(cur) ? cur : ''; }
   iSel.style.display = insNames.length ? '' : 'none';
+  // date chip: newest / oldest order, or only one inspection day
+  const dateOf = (n) => String((fillAll[recs[n]] || {})['Inspection Date'] || '').slice(0, 10);
+  const days = [...new Set(all.map(dateOf).filter(Boolean))].sort().reverse();
+  const dayTxt = (d) => { const t = new Date(d + 'T12:00'); return isNaN(t) ? d : t.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: t.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }); };
+  { const dSel = $('hSort'); dSel.textContent = ''; dSel.append(new Option('Date', ''), new Option('Newest first', 'desc'), new Option('Oldest first', 'asc'));
+    if (days.length) { const g = document.createElement('optgroup'); g.label = 'Inspection day'; days.forEach((d) => g.append(new Option(dayTxt(d), 'd:' + d))); dSel.append(g); }
+    if (dateSort.startsWith('d:') && !days.includes(dateSort.slice(2))) dateSort = '';
+    dSel.value = dateSort; }
+  const dayV = dateSort.startsWith('d:') ? dateSort.slice(2) : '', order0 = dayV ? '' : dateSort;
+  // test result chip: every result used on any damper, in Airtable's order
+  const opOf = (n) => ((fillAll[recs[n]] || {})['Operational Test']) || '';
+  const opChoices = ((getOpts()['Operational Test'] || {}).choices) || [];
+  const seen = [...new Set(all.map(opOf))].filter(Boolean);
+  const order = [...opChoices.filter((c) => seen.includes(c)), ...seen.filter((c) => !opChoices.includes(c)).sort(), ...(all.some((n) => !opOf(n)) ? [''] : [])];
+  const oSel = $('hOp');
+  { const cur = oSel.value || mem('sel_op'); oSel.textContent = ''; oSel.append(new Option('Test result', '')); order.forEach((v) => oSel.append(new Option(v || 'No test yet', v || '__none'))); oSel.value = order.map((v) => v || '__none').includes(cur) ? cur : ''; }
+  oSel.style.display = order.length ? '' : 'none';
+  const ov = oSel.value;
+  ['hBld', 'hFlr', 'hIns', 'hSort', 'hOp'].forEach((k) => $(k).classList.toggle('on', !!$(k).value));
   $('hFilters').style.display = (bl.length > 1 || fl.length > 1 || insNames.length || all.length) ? 'flex' : 'none';
   const iv = iSel.value;
   const STARTED = ['Inspector(s)', 'Inspection Date', 'Inspection Field Notes', 'Operational Test', 'Inspection Note - Select', 'Suggested Follow-up', 'Special Conditions - Inspections'];
@@ -1476,7 +1495,8 @@ async function renderHome() {
   const hasPhoto = (rid) => { const pr = picsAll[rid]; return !!pr && Object.keys(pr).some((k) => picCols.includes(norm(k)) && pr[k].length); };
   const NOFLAG = /remove from inventory|accidental entry delete/i;
   const flagged = (n) => { const rid = recs[n]; return !!(fl8[rid] && !NOFLAG.test(String((fillAll[rid] || {})['Operational Test'] || '')) && (STARTED.some((k) => fillAll[rid] && fillAll[rid][k]) || hasPhoto(rid))); };
-  const inScope = (n, i) => (!q || n.toLowerCase().includes(q)) && (!bv || info[i].b === bv) && (!fv || info[i].fl === fv) && (!iv || (iv === '__none' ? !insOf(n).length : insOf(n).includes(iv)));
+  const inScope = (n, i) => (!q || n.toLowerCase().includes(q)) && (!bv || info[i].b === bv) && (!fv || info[i].fl === fv) && (!iv || (iv === '__none' ? !insOf(n).length : insOf(n).includes(iv)))
+    && (!dayV || dateOf(n) === dayV) && (!ov || opOf(n) === (ov === '__none' ? '' : ov));
   const nMiss = all.filter((n, i) => inScope(n, i) && flagged(n)).length;
   if (!nMiss) onlyMiss = false;
   $('hMiss').hidden = !nMiss; $('hMiss').textContent = '';
@@ -1485,8 +1505,6 @@ async function renderHome() {
   else $('hMiss').append('● ' + nMiss + ' missing');
   const hits = all.filter((n, i) => (!onlyMiss || flagged(n)) && inScope(n, i));
   const list = $('dlist'); list.textContent = '';
-  const opOf0 = (n) => ((fillAll[recs[n]] || {})['Operational Test']) || '';
-  const dateOf = (n) => String((fillAll[recs[n]] || {})['Inspection Date'] || '').slice(0, 10);
   const row = (n) => {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'pkitem';
     const t = document.createElement('span');
@@ -1495,36 +1513,26 @@ async function renderHome() {
     if (drafts[recs[n]] && !waiting.has(recs[n])) { const m = document.createElement('span'); m.className = 'pend'; m.style.color = 'var(--brand)'; m.textContent = '● draft'; b.append(m); }
     if (waiting.has(recs[n])) { const m = document.createElement('span'); m.className = 'pend'; m.textContent = '● waiting to sync'; b.append(m); }
     b.onclick = () => openDamper(n);
-    if (dateSort) { const dt = dateOf(n); const m = document.createElement('span'); m.className = 'pend'; m.style.color = 'var(--muted)'; m.style.fontWeight = '500'; m.textContent = dt || 'no date'; b.insertBefore(m, b.children[1] || null); }
+    if (order0) { const dt = dateOf(n); const m = document.createElement('span'); m.className = 'pend'; m.style.color = 'var(--muted)'; m.style.fontWeight = '500'; m.textContent = dt || 'no date'; b.insertBefore(m, b.children[1] || null); }
     return b;
   };
-  if (dateSort) { // one flat list ordered by Inspection Date (dampers with no date go last)
+  if (order0) { // one flat list ordered by Inspection Date (dampers with no date go last)
     const sorted = [...hits].sort((a, c) => {
       const x = dateOf(a), y = dateOf(c);
       if (!x !== !y) return x ? -1 : 1;
-      return (x === y ? 0 : (x < y ? -1 : 1) * (dateSort === 'asc' ? 1 : -1)) || cmpDamper(a, c);
+      return (x === y ? 0 : (x < y ? -1 : 1) * (order0 === 'asc' ? 1 : -1)) || cmpDamper(a, c);
     });
     navList = sorted;
     renderGrid(list, [{ key: 'flat', flat: true, items: sorted }], { dd, fillAll, flagged, recs, opOf: (n) => ((fillAll[recs[n]] || {})['Operational Test']) || '' });
     $('hCount').textContent = countText(hits.length, all.length);
     return;
   }
-  if ($('hView').value === 'all') { // everything in one grid, no menus
-    navList = hits;
-    renderGrid(list, [{ key: 'flat', flat: true, items: hits }], { dd, fillAll, flagged, recs, opOf: (n) => ((fillAll[recs[n]] || {})['Operational Test']) || '' });
-    $('hCount').textContent = countText(hits.length, all.length);
-    return;
-  }
   // Groups: flagged dampers first, then one group per Operational Test result (the choices in Airtable's order), then untested
-  const opOf = (n) => ((fillAll[recs[n]] || {})['Operational Test']) || '';
   const groups = [];
   const rest = hits;
-  const opChoices = ((getOpts()['Operational Test'] || {}).choices) || [];
-  const seen = [...new Set(all.map(opOf))].filter(Boolean); // every result used on any damper, even if none match the filters right now
-  const order = [...opChoices.filter((c) => seen.includes(c)), ...seen.filter((c) => !opChoices.includes(c)).sort(), ...(all.some((n) => !opOf(n)) ? [''] : [])];
   navList = order.flatMap((v) => rest.filter((n) => opOf(n) === v));
   groups.push({ key: 'all', label: 'All Dampers', items: rest });
-  for (const v of order) groups.push({ key: 'op:' + v, label: v || 'No Operational Test yet', op: v || 'No Operational Test yet', noop: !v, items: rest.filter((n) => opOf(n) === v) });
+  for (const v of order) if (!ov || v === (ov === '__none' ? '' : ov)) groups.push({ key: 'op:' + v, label: v || 'No Operational Test yet', op: v || 'No Operational Test yet', noop: !v, items: rest.filter((n) => opOf(n) === v) });
   if (true) {
     navList = groups.filter((g) => g.key !== 'all').flatMap((g) => g.items);
     renderGrid(list, groups, { dd, fillAll, flagged, recs, row0: null, opOf });
@@ -1551,8 +1559,7 @@ async function renderHome() {
 $('hMiss').onclick = () => { onlyMiss = !onlyMiss; renderHome(); };
 $('hIns').onchange = () => renderHome(); $('hBld').onchange = () => { try { localStorage.setItem('sel_bld', $('hBld').value); localStorage.setItem('sel_flr', ''); } catch {} $('hFlr').value = ''; renderHome(); };
 $('navPrev').onclick = () => navGo(-1); $('navNext').onclick = () => navGo(1);
-$('hView').onchange = () => { try { localStorage.setItem('sel_view', $('hView').value); } catch {} renderHome(); };
-try { $('hView').value = (localStorage.getItem('sel_view') === 'all' ? 'all' : 'status'); } catch {}
+$('hOp').onchange = () => { try { localStorage.setItem('sel_op', $('hOp').value); } catch {} renderHome(); };
 $('hFlr').onchange = () => { try { localStorage.setItem('sel_flr', $('hFlr').value); } catch {} renderHome(); }; $('hSearch').oninput = () => renderHome();
 function buildPhotos() {
   const pb = $('photoBlocks'); pb.textContent = '';
