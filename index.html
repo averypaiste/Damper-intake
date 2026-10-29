@@ -153,7 +153,6 @@
 <body>
 <header>
   <div id="ttl"><h1><span class="long">Damper Inspection</span><span class="short">Dampers</span></h1><span id="net">Online</span></div>
-  <button class="small secondary" id="btnSort" style="color:#fff;border-color:#fff">Sort</button>
   <button class="small secondary" id="btnMsgs" style="color:#fff;border-color:#fff;position:relative">Messages<span id="msgDot" hidden style="position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;background:#f79009"></span></button>
   <button class="small secondary" id="btnSettings" style="color:#fff;border-color:#fff">Settings</button>
   <button class="small secondary" id="btnHelp" aria-label="Help" style="color:#fff;border-color:#fff;border-radius:50%;width:34px;height:34px;padding:0">?</button>
@@ -175,6 +174,7 @@
         <select id="hBld" aria-label="Building"></select>
         <select id="hFlr" aria-label="Floor"></select>
         <select id="hIns" aria-label="Inspector"></select>
+        <select id="hSort" aria-label="Sort by date"><option value="">Date: any order</option><option value="desc">Date: newest first</option><option value="asc">Date: oldest first</option></select>
         <select id="hView" aria-label="Layout"><option value="status">Sort by status</option><option value="all">All Dampers</option></select>
         <button type="button" class="secondary small" id="hMiss" hidden style="margin:0;font-size:13px;padding:6px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></button>
       </div>
@@ -290,11 +290,11 @@
     <div class="hq"><b>Unfinished work is kept</b></div>
     <p>Anything you type or photograph is kept even if you close the page without saving. The damper shows <b>draft</b>, but it is not sent until you tap <b>Save entry</b>.</p>
     <div class="hq"><b>Photos</b></div>
-    <p>Photos already taken show in each box. Tap <b>Take photo</b> to use the camera, or <b>Upload file</b> to pick one you already have. Photos from the camera are also kept in your phone's Photos app.</p>
+    <p>Photos already taken show in each box. Tap <b>Take photo</b> to use the camera, <b>Camera roll</b> to pick from your photos, or <b>Choose file</b> for anything else. Photos from the camera are also kept in your phone's Photos app.</p>
     <div class="hq"><b>Menus (Pass, Fail...)</b></div>
     <p>Tap a title to open or close that group.</p>
-    <div class="hq"><b>Sort</b></div>
-    <p>At the top. Puts the list in order by inspection date. Tap again to switch the direction, then again to turn it off.</p>
+    <div class="hq"><b>Date order</b></div>
+    <p>The <b>Date</b> box above search puts the list in order by inspection date (newest or oldest first). Set it back to <b>any order</b> to see the Pass / Fail groups again.</p>
     <div class="hq"><b>Messages</b></div>
     <p>Normally empty. If it has an orange dot, something went wrong that needs fixing. Open it and tell Avery what it says, including the code number (like 422). Tap <b>Copy for Avery</b> to copy it so you can paste it into a text.</p>
     <div class="hq"><b>The top bar color</b></div>
@@ -643,7 +643,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-29-b';
+const APP_VERSION = '2026-10-29-c';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1398,14 +1398,13 @@ $('btnNew').onclick = () => openNew();
 // The list of dampers on the first screen (building and floor dropdowns, search, and a marker for entries still waiting)
 let homeSeq = 0, onlyMiss = false;
 const openSet = new Set(); // menus opened by the person; they stay open (also after visiting a damper) until the person closes them
-// Top-bar Sort button: off -> newest first -> oldest first -> off
 let dateSort = (() => { try { return localStorage.getItem('dsort') || ''; } catch { return ''; } })();
-function showSortLabel() { $('btnSort').textContent = dateSort === 'desc' ? 'Date ↓' : dateSort === 'asc' ? 'Date ↑' : 'Sort'; }
-showSortLabel();
-$('btnSort').onclick = () => {
-  dateSort = dateSort === '' ? 'desc' : dateSort === 'desc' ? 'asc' : '';
+// Date sort, in the filter boxes above search: any order (grouped by status) / newest first / oldest first
+$('hSort').value = dateSort;
+$('hSort').onchange = () => {
+  dateSort = $('hSort').value;
   try { localStorage.setItem('dsort', dateSort); } catch {}
-  showSortLabel(); renderHome();
+  renderHome();
 };
 async function renderHome() {
   const seq = ++homeSeq;
