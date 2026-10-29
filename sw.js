@@ -1,9 +1,9 @@
 // Keeps the app available offline. Online: always fetch the newest files. Offline: use the saved copy.
-const CACHE = 'intake-v15';
+const CACHE = 'intake-v16';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -18,7 +18,8 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return; // never touch Airtable calls
   e.respondWith(
-    fetch(req).then((res) => {
+    // skip the phone's 10-minute browser cache so a new release shows on the next open
+    fetch(req.url, { cache: 'no-cache' }).then((res) => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
       return res;
     }).catch(() => caches.match(req).then((hit) => hit || caches.match('index.html')))
