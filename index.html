@@ -119,6 +119,25 @@
   #quick textarea, #quick input[type=text] { font-size:16px; }
   @keyframes flashbg { 0%,60% { background:rgba(255,200,0,.35); } 100% { background:transparent; } }
   .flash { animation:flashbg 2.2s ease-out; border-radius:8px; }
+  html { -webkit-text-size-adjust:100%; text-size-adjust:100%; } /* stops iPhone from enlarging text in some grid cells */
+  header .hic { color:#fff; border-color:#fff; border-radius:50%; width:36px; height:36px; padding:0; font-size:17px; line-height:1; position:relative; flex:0 0 auto; }
+  .vrow { display:flex; gap:8px; align-items:center; }
+  .vrow select { flex:1; min-width:0; margin:0; font-weight:600; }
+  .vrow button { flex:0 0 44px; height:44px; padding:0; font-size:20px; margin:0; }
+  .fchips { display:flex; flex-wrap:nowrap; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; margin:10px 0; padding-bottom:2px; scrollbar-width:none; }
+  .fchips::-webkit-scrollbar { display:none; }
+  .fchips select, .chipf { flex:0 0 auto; width:auto; margin:0; border:1px solid var(--line); border-radius:99px; padding:6px 26px 6px 12px; font-size:14px; background:var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23667085'/%3E%3C/svg%3E") no-repeat right 10px center; color:var(--ink); -webkit-appearance:none; appearance:none; min-height:0; height:34px; }
+  .chipf { padding:6px 12px; background:var(--card); font-weight:600; cursor:pointer; white-space:nowrap; }
+  .chipf.miss { border-color:#f04438; color:#b42318; }
+  .sbar { position:relative; }
+  .sbar input { padding-right:96px; margin:0; }
+  #hCount { position:absolute; right:12px; top:50%; transform:translateY(-50%); font-size:13px; color:var(--muted); pointer-events:none; white-space:nowrap; }
+  #btnNew { position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom)); z-index:6; border-radius:99px; padding:13px 20px; font-weight:700; font-size:15px; box-shadow:0 4px 14px rgba(0,0,0,.28); }
+  main { padding-bottom:80px; }
+  .gnote { white-space:normal !important; align-items:flex-start !important; flex-direction:column; justify-content:center; }
+  .gnote .nt { white-space:pre-wrap; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.35; width:100%; }
+  .gnote.open .nt { display:block; -webkit-line-clamp:unset; }
+  .gnote .more { border:0; background:none; color:var(--brand); font-size:12px; font-weight:700; padding:2px 0 0; margin:0; min-height:0; cursor:pointer; }
   .gridwrap { overflow-x:auto; -webkit-overflow-scrolling:touch; border:1px solid var(--line); border-radius:8px; margin-top:8px; }
   .gridin { position:relative; }
   .grow { display:flex; }
@@ -153,33 +172,31 @@
 <body>
 <header>
   <div id="ttl"><h1><span class="long">Damper Inspection</span><span class="short">Dampers</span></h1><span id="net">Online</span></div>
-  <button class="small secondary" id="btnMsgs" style="color:#fff;border-color:#fff;position:relative">Messages<span id="msgDot" hidden style="position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;background:#f79009"></span></button>
-  <button class="small secondary" id="btnSettings" style="color:#fff;border-color:#fff">Settings</button>
-  <button class="small secondary" id="btnHelp" aria-label="Help" style="color:#fff;border-color:#fff;border-radius:50%;width:34px;height:34px;padding:0">?</button>
+  <button class="small secondary hic" id="btnMsgs" aria-label="Messages" title="Messages">✉<span id="msgDot" hidden style="position:absolute;top:-3px;right:-3px;width:10px;height:10px;border-radius:50%;background:#f79009"></span></button>
+  <button class="small secondary hic" id="btnSettings" aria-label="Settings" title="Settings">⚙</button>
+  <button class="small secondary hic" id="btnHelp" aria-label="Help" title="Help">?</button>
 </header>
 
+<button type="button" id="btnNew">+ New damper</button>
 <main>
   <section id="home">
     <div class="card">
       <div hidden><select id="mView"><option value="">All dampers in this table</option></select></div>
-      <label for="mTable" style="margin-top:0">View</label>
-      <select id="mTable" style="margin-bottom:12px"></select>
-      <div class="row" style="margin-bottom:12px">
-        <button type="button" class="secondary small" id="btnNew">+ New damper</button>
-        <button type="button" class="secondary small" id="btnLists">↻ Refresh lists</button>
+      <div class="vrow">
+        <select id="mTable" aria-label="View"></select>
+        <button type="button" class="secondary" id="btnLists" aria-label="Refresh lists" title="Refresh lists">↻</button>
       </div>
       <p class="hint" id="dl" hidden style="margin:-4px 0 10px"></p>
       <p id="hMsg" hidden style="margin:-4px 0 10px;font-weight:600"></p>
-      <div id="hFilters" style="display:none;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:8px">
+      <div id="hFilters" class="fchips" style="display:none">
+        <button type="button" class="chipf miss" id="hMiss" hidden></button>
         <select id="hBld" aria-label="Building"></select>
         <select id="hFlr" aria-label="Floor"></select>
         <select id="hIns" aria-label="Inspector"></select>
-        <select id="hSort" aria-label="Sort by date"><option value="">Date: any order</option><option value="desc">Date: newest first</option><option value="asc">Date: oldest first</option></select>
-        <select id="hView" aria-label="Layout"><option value="status">Sort by status</option><option value="all">All Dampers</option></select>
-        <button type="button" class="secondary small" id="hMiss" hidden style="margin:0;font-size:13px;padding:6px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></button>
+        <select id="hSort" aria-label="Sort by date"><option value="">Date</option><option value="desc">Date: newest</option><option value="asc">Date: oldest</option></select>
+        <select id="hView" aria-label="Layout"><option value="status">By status</option><option value="all">All dampers</option></select>
       </div>
-      <input id="hSearch" type="search" placeholder="Search dampers…" autocomplete="off" autocapitalize="off" spellcheck="false">
-      <p class="hint" id="hCount" style="margin:8px 0 0"></p>
+      <div class="sbar"><input id="hSearch" type="search" placeholder="🔍 Search dampers…" autocomplete="off" autocapitalize="off" spellcheck="false"><span id="hCount"></span></div>
       <div id="dlist"></div>
     </div>
     <section class="card" id="savedCard" hidden style="margin-top:12px">
@@ -365,7 +382,7 @@ const $ = (id) => document.getElementById(id);
    they appear in Airtable, e.g. ['Damper Survey', 'Floor 2']. Leave empty to offer every view. */
 const TECH_VIEWS = [];
 /* Text columns shown in the info card (photos are always all shown). */
-const INFO_FIELDS = ['Inspection Date', 'Inspector(s)'];
+const INFO_FIELDS = ['Inspection Date', 'Inspector(s)', 'Building', 'Floor', 'Room/Location', 'Damper Type', 'Duct Width', 'Duct Height', 'Inspection Field Notes'];
 const MISS_FIELD = 'Missing Fields / Inconsistencies'; // shown at the top of each damper's page and flagged in the list
 const DEFAULTS = { base: 'appljnHf6IudjojK5', table: 'AVERY APP TESTING' }; // IDs and names are not secrets
 const cfg = () => {
@@ -643,7 +660,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-29-c';
+const APP_VERSION = '2026-10-29-d';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -653,7 +670,7 @@ function report(msg, manual) {
     return;
   }
   // Real problems go in Messages (with the code); a lost connection or a refresh already running is not a problem
-  if (/lists loaded/.test(msg)) setErr('err_refresh', null);
+  if (/lists loaded/.test(msg)) { setErr('err_refresh', null); try { localStorage.setItem('listsAt', String(Date.now())); } catch {} netState(); }
   else if (!/Could not reach Airtable|Needs a connection|Still loading/i.test(msg)) { const m = msg.match(/error (\d{3})/i);
     // keep only the part that matters: drop the table name up front and the long list of columns at the end
     const short = msg.replace(/^Table "[^"]*"( › [^\s]+)?\s*/, '').replace(/\s*Its columns are:.*$/, '').replace(/^has no column called:/, 'No column called:').slice(0, 300);
@@ -1299,10 +1316,10 @@ function renderGrid(list, groups, ctx) {
   gridUrls.forEach((u) => URL.revokeObjectURL(u)); gridUrls = [];
   if (gridObs) gridObs.disconnect();
   const GC = [
-    ['id', 'Damper ID', 130], ['text', 'Floor', 70], ['text', 'Room/Location', 190], ['pic', LOC_PIC, 84], ['text', 'Damper Type', 150],
+    ['id', 'Damper ID', 130], ['text', 'Building', 90], ['text', 'Floor', 70], ['text', 'Room/Location', 190], ['pic', LOC_PIC, 84], ['text', 'Damper Type', 150],
     ['chip', 'Barrier Rating', 150], ['chip', 'Damper Mechanism', 170],
     ...PHOTOS.filter((n) => n !== LOC_PIC).map((n) => ['pic', n, 84]),
-    ['chip', 'Operational Test', 130], ['text', 'Duct Width', 90], ['text', 'Duct Height', 90], ['text', 'Inspection Field Notes', 210],
+    ['chip', 'Operational Test', 130], ['text', 'Duct Width', 90], ['text', 'Duct Height', 90], ['note', 'Inspection Field Notes', 260],
     ['multi', 'Inspection Note - Select', 230], ['multi', 'Suggested Follow-up', 190], ['multi', 'Special Conditions - Inspections', 190],
     ['multi', 'Inspector(s)', 160], ['text', 'Inspection Date', 120],
   ];
@@ -1356,6 +1373,14 @@ function renderGrid(list, groups, ctx) {
         if (!Array.isArray(arr)) arr = [arr];
         d.style.gap = '4px'; d.title = arr.map((x) => rev[x] || x).join(', ');
         arr.forEach((x) => { const c = document.createElement('span'); c.className = 'chip'; c.style.maxWidth = '170px'; c.style.background = 'var(--bg)'; c.style.border = '1px solid var(--line)'; c.style.color = 'var(--ink)'; c.textContent = rev[x] || x; d.append(c); });
+      } else if (kind === 'note') { // the whole note when it fits in the row; longer ones get "more" to open them right here
+        const v = val(rid, name); d.classList.add('gnote'); if (!v) { r.append(d); return; }
+        const t = document.createElement('div'); t.className = 'nt'; t.textContent = v; d.append(t);
+        requestAnimationFrame(() => { if (t.scrollHeight > t.clientHeight + 1) {
+          const m = document.createElement('button'); m.type = 'button'; m.className = 'more'; m.textContent = 'more ▾';
+          m.onclick = (e) => { e.stopPropagation(); const o = d.classList.toggle('open'); m.textContent = o ? 'less ▴' : 'more ▾'; };
+          d.append(m);
+        } });
       } else { const v = val(rid, name); d.textContent = v; d.title = v; }
       r.append(d);
     });
@@ -1406,6 +1431,7 @@ $('hSort').onchange = () => {
   try { localStorage.setItem('dsort', dateSort); } catch {}
   renderHome();
 };
+const countText = (n, all) => !all ? 'tap ↻ to load' : n === all ? all + ' dampers' : n + ' of ' + all;
 async function renderHome() {
   const seq = ++homeSeq;
   const ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key] || {}, all = [...(o.choices || [])].sort(cmpDamper), recs = o.recs || {};
@@ -1426,12 +1452,12 @@ async function renderHome() {
   const bSel = $('hBld'), fSel = $('hFlr');
   const mem = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
   const fill = (el, first, vals, fmt, key) => { const cur = el.value || mem(key); el.textContent = ''; [['', first], ...vals.map((v) => [v, fmt ? fmt(v) : v])].forEach(([v, t]) => el.append(new Option(t, v))); el.value = vals.includes(cur) ? cur : ''; };
-  fill(bSel, 'All buildings', bl, null, 'sel_bld');
+  fill(bSel, 'Building', bl, (v) => 'Bldg ' + v, 'sel_bld');
   // the floors offered are the ones in the chosen building
   const fl = [...new Set(info.filter((x) => !bSel.value || x.b === bSel.value).map((x) => x.fl).filter(Boolean))].sort((a, b) => a - b);
-  fill(fSel, 'All floors', fl, (v) => 'Floor ' + v, 'sel_flr');
+  fill(fSel, 'Floor', fl, (v) => 'Floor ' + v, 'sel_flr');
   bSel.style.display = bl.length ? '' : 'none'; fSel.style.display = fl.length ? '' : 'none';
-  $('hFilters').style.display = (bl.length || fl.length || true) ? 'grid' : 'none';
+  $('hFilters').style.display = 'flex';
   const q = $('hSearch').value.trim().toLowerCase(), bv = bSel.value, fv = fSel.value;
   // "Missing info" only counts once somebody has started filling the damper in (one of these has a value)
   const fillAll = (dd && dd.fill) || {};
@@ -1439,9 +1465,9 @@ async function renderHome() {
   const insOf = (n) => { const v = (fillAll[recs[n]] || {})['Inspector(s)']; return Array.isArray(v) ? v : v ? [v] : []; };
   const insNames = [...new Set(all.flatMap(insOf))].sort((a, b) => a.localeCompare(b));
   const iSel = $('hIns');
-  { const cur = iSel.value; iSel.textContent = ''; iSel.append(new Option('All inspectors', '')); insNames.forEach((v) => iSel.append(new Option(v, v))); if (insNames.length) iSel.append(new Option('No inspector yet', '__none')); iSel.value = [...insNames, '__none'].includes(cur) ? cur : ''; }
+  { const cur = iSel.value; iSel.textContent = ''; iSel.append(new Option('Inspector', '')); insNames.forEach((v) => iSel.append(new Option(v, v))); if (insNames.length) iSel.append(new Option('No inspector yet', '__none')); iSel.value = [...insNames, '__none'].includes(cur) ? cur : ''; }
   iSel.style.display = insNames.length ? '' : 'none';
-  $('hFilters').style.display = (bl.length > 1 || fl.length > 1 || insNames.length || all.length) ? 'grid' : 'none';
+  $('hFilters').style.display = (bl.length > 1 || fl.length > 1 || insNames.length || all.length) ? 'flex' : 'none';
   const iv = iSel.value;
   const STARTED = ['Inspector(s)', 'Inspection Date', 'Inspection Field Notes', 'Operational Test', 'Inspection Note - Select', 'Suggested Follow-up', 'Special Conditions - Inspections'];
   // a photo in any of the photo boxes (not Location Pic) also counts as started
@@ -1456,7 +1482,7 @@ async function renderHome() {
   $('hMiss').hidden = !nMiss; $('hMiss').textContent = '';
   $('hMiss').title = onlyMiss ? 'Showing only dampers with missing/incomplete info. Tap to show all.' : 'Tap to show only dampers with missing/incomplete info.';
   if (onlyMiss) $('hMiss').append('✕ Missing only (' + nMiss + ')');
-  else { const w = document.createElement('span'); w.className = 'rdot'; $('hMiss').append(w, nMiss + ' missing info'); }
+  else $('hMiss').append('● ' + nMiss + ' missing');
   const hits = all.filter((n, i) => (!onlyMiss || flagged(n)) && inScope(n, i));
   const list = $('dlist'); list.textContent = '';
   const opOf0 = (n) => ((fillAll[recs[n]] || {})['Operational Test']) || '';
@@ -1480,13 +1506,13 @@ async function renderHome() {
     });
     navList = sorted;
     renderGrid(list, [{ key: 'flat', flat: true, items: sorted }], { dd, fillAll, flagged, recs, opOf: (n) => ((fillAll[recs[n]] || {})['Operational Test']) || '' });
-    $('hCount').textContent = all.length ? hits.length + ' of ' + all.length + ' dampers, by inspection date (' + (dateSort === 'asc' ? 'oldest first' : 'newest first') + ')' : 'No dampers loaded yet. Tap Refresh lists.';
+    $('hCount').textContent = countText(hits.length, all.length);
     return;
   }
   if ($('hView').value === 'all') { // everything in one grid, no menus
     navList = hits;
     renderGrid(list, [{ key: 'flat', flat: true, items: hits }], { dd, fillAll, flagged, recs, opOf: (n) => ((fillAll[recs[n]] || {})['Operational Test']) || '' });
-    $('hCount').textContent = all.length ? hits.length + ' of ' + all.length + ' dampers. Swipe sideways to see all columns.' : 'No dampers loaded yet. Tap Refresh lists.';
+    $('hCount').textContent = countText(hits.length, all.length);
     return;
   }
   // Groups: flagged dampers first, then one group per Operational Test result (the choices in Airtable's order), then untested
@@ -1502,7 +1528,7 @@ async function renderHome() {
   if (true) {
     navList = groups.filter((g) => g.key !== 'all').flatMap((g) => g.items);
     renderGrid(list, groups, { dd, fillAll, flagged, recs, row0: null, opOf });
-    $('hCount').textContent = all.length ? hits.length + ' of ' + all.length + ' dampers. Swipe sideways to see all columns.' : 'No dampers loaded yet. Tap Refresh lists.';
+    $('hCount').textContent = countText(hits.length, all.length);
     return;
   }
   const searching = !!q; // typing in the search box opens every menu so the matches are visible
@@ -1520,7 +1546,7 @@ async function renderHome() {
     });
     list.append(d);
   }
-  $('hCount').textContent = all.length ? hits.length + ' of ' + all.length + ' dampers' : 'No dampers loaded yet. Tap Refresh lists.';
+  $('hCount').textContent = countText(hits.length, all.length);
 }
 $('hMiss').onclick = () => { onlyMiss = !onlyMiss; renderHome(); };
 $('hIns').onchange = () => renderHome(); $('hBld').onchange = () => { try { localStorage.setItem('sel_bld', $('hBld').value); localStorage.setItem('sel_flr', ''); } catch {} $('hFlr').value = ''; renderHome(); };
@@ -2031,7 +2057,13 @@ $('btnMsgs').onclick = showMsgs;
 $('btnHelp').onclick = () => $('helpDlg').showModal();
 $('helpClose').onclick = () => $('helpDlg').close();
 $('msgClose').onclick = () => $('msgDlg').close();
-function netState() { const on = navigator.onLine; $('net').textContent = on ? 'Online' : 'Offline'; document.querySelector('header').classList.toggle('off', !on); }
+function netState() {
+  const on = navigator.onLine, t = +(localStorage.getItem('listsAt') || 0), m = t ? Math.floor((Date.now() - t) / 60000) : -1;
+  const ago = m < 0 ? '' : m < 1 ? 'updated just now' : m < 60 ? 'updated ' + m + ' min ago' : 'updated ' + new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  $('net').textContent = (on ? 'Online' : 'Offline') + (ago ? ' · ' + ago : '');
+  document.querySelector('header').classList.toggle('off', !on);
+}
+setInterval(netState, 20 * 1000);
 addEventListener('online', () => { netState(); sync(); refreshOptions(); });
 addEventListener('offline', netState);
 // Keep the lists fresh while online: every 30 seconds, whenever the connection comes back, and whenever the app is
