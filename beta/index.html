@@ -767,7 +767,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-29-n (test copy)';
+const APP_VERSION = '2026-10-29-o (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1502,6 +1502,7 @@ function openQuick(n, name, dd, recs) {
   if (el && !f.multi) el.focus();
   if (el && f.multi && !JSON.parse(el.dataset.sel || '[]').length) openPicker(f, el); // nothing chosen yet: go straight to the list
 }
+let gridX = 0;
 function renderGrid(list, groups, ctx) {
   const { dd, fillAll, flagged, recs, opOf } = ctx;
   gridUrls.forEach((u) => URL.revokeObjectURL(u)); gridUrls = [];
@@ -1601,6 +1602,8 @@ function renderGrid(list, groups, ctx) {
     inner.append(gh, body); open(!!$('hSearch').value.trim() || openSet.has(g.key));
   }
   list.append(wrap);
+  wrap.scrollLeft = gridX; // stay where you scrolled to when the list refreshes itself
+  wrap.addEventListener('scroll', () => { gridX = wrap.scrollLeft; }, { passive: true });
   const setW = () => wrap.style.setProperty('--vw', wrap.clientWidth + 'px');
   setW(); requestAnimationFrame(setW);
 }
