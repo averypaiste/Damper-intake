@@ -801,7 +801,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-29-s (test copy)';
+const APP_VERSION = '2026-10-29-t (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1438,6 +1438,7 @@ function openQuick(n, name, dd, recs) {
   let el, qPhotos = [];
   const pickOnly = f && f.type === 'select' && (o.choices || []).length > 0;
   let startVal = '';
+  const dateOnly = f && f.type === 'date' && typeof HTMLInputElement.prototype.showPicker === 'function';
   if (pickOnly) { // one box: the colored list itself. A pick saves straight away (Done for lists that take several)
     el = document.createElement('input'); el.type = 'text'; el.readOnly = true; el.hidden = true;
     if (f.multi) {
@@ -1510,7 +1511,7 @@ function openQuick(n, name, dd, recs) {
       fields[colOf(f.key)] = val; disp = (Array.isArray(fillVal) ? fillVal : [fillVal]).join(', ');
     } else {
       const v = el.value.trim();
-      if (!v && pickOnly) { fields[colOf(f.key)] = o.type === 'multipleSelects' || o.type === 'multipleCollaborators' ? [] : null; fillVal = ''; disp = ''; } // Clear
+      if (!v && (pickOnly || dateOnly)) { fields[colOf(f.key)] = o.type === 'multipleSelects' || o.type === 'multipleCollaborators' ? [] : null; fillVal = ''; disp = ''; } // Clear
       else if (!v) { q.close(); return; }
       else {
       let val = f.type === 'number' ? Number(v) : v;
@@ -1534,6 +1535,17 @@ function openQuick(n, name, dd, recs) {
     openPicker(f, el);
     $('pkTitle').textContent = $('qTitle').textContent;
     $('picker').addEventListener('close', () => { if (el.value !== startVal) doSave(); }, { once: true });
+    return;
+  }
+  if (dateOnly) { // just the phone's calendar, no box behind it; the picked day saves by itself
+    el.style.cssText = 'position:fixed;left:50%;top:40%;width:1px;height:1px;opacity:0;border:0;padding:0';
+    document.body.append(el);
+    const start = el.value; let t = 0, done = false;
+    const finish = () => { clearTimeout(t); if (done) return; done = true; el.remove(); if (el.value !== start) doSave(); };
+    el.addEventListener('change', () => { clearTimeout(t); t = setTimeout(finish, 900); });
+    el.addEventListener('blur', () => setTimeout(finish, 50));
+    el.focus();
+    try { el.showPicker(); } catch { /* older phones: focusing the box opens the calendar */ }
     return;
   }
   q.showModal();
