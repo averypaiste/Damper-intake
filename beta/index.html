@@ -215,6 +215,25 @@
   #detailBody input, #detailBody select, #detailBody textarea { border-color:transparent; background:var(--bg); }
   #detailBody input:focus, #detailBody select:focus, #detailBody textarea:focus { border-color:#2d7ff9; outline:0; background:var(--card); }
   #dOp:empty { display:none; }
+  .gbody .gc { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  #pasteBar { position:fixed; left:12px; right:12px; bottom:calc(14px + env(safe-area-inset-bottom)); z-index:6; background:#1b1f24; color:#fff; border-radius:14px; padding:10px 84px 10px 12px; box-shadow:0 6px 20px rgba(0,0,0,.25); }
+  #pasteBar #pbVal { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:4px; }
+  #pasteBar #pbHint { color:#d0d5dd; margin:0; font-size:13px; }
+  #pbDone { position:absolute; right:10px; top:50%; transform:translateY(-50%); background:#2d7ff9; border:0; color:#fff; border-radius:99px; padding:8px 14px; font-size:15px; }
+  /* choice lists: a sheet from the bottom with the choices side by side, as in the Airtable app */
+  .pkhead { position:relative; display:flex; align-items:center; }
+  #pkDone { display:none; position:absolute; right:-4px; top:50%; transform:translateY(-50%); background:transparent; border:0; color:#2d7ff9; font-size:17px; font-weight:500; padding:6px; }
+  #picker.sheet[open] { top:auto; bottom:0; margin:0; width:100%; max-width:100%; height:auto; max-height:80vh; max-height:80dvh; border:0; border-radius:16px 16px 0 0; padding:14px 16px calc(16px + env(safe-area-inset-bottom)); }
+  #picker.sheet .pkhead { justify-content:center; min-height:32px; margin-bottom:6px; }
+  #picker.sheet #pkTitle { font-size:17px; font-weight:600; margin:0; padding:0 56px; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #picker.sheet #pkDone { display:block; }
+  #picker.sheet #pkClose { display:none; }
+  #picker.sheet #pkSearch { border:0; background:transparent; padding:8px 2px; font-size:16px; }
+  #pkList.flow { display:flex; flex-wrap:wrap; gap:9px 8px; align-content:flex-start; padding:4px 0 8px; margin:4px 0 0; }
+  .pkpill { background:transparent; border:0; padding:0; border-radius:99px; max-width:100%; }
+  .pkpill .chip { font-size:15px; font-weight:500; padding:5px 14px; white-space:normal; text-align:left; display:inline-flex; align-items:center; gap:6px; }
+  .pkclear { border:1px solid var(--line); color:var(--muted); padding:5px 14px; font-size:15px; font-weight:500; }
+  .ckc { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:#1b1f24; color:#fff; font-size:11px; font-weight:800; margin-right:-6px; }
   header #btnToJobs { background:transparent; border:0; color:#fff; font-size:30px; line-height:1; width:auto; padding:0 4px 4px 0; margin-right:-2px; }
   /* pick-list fields show their choices as colored ovals, like Airtable */
   .pv { position:absolute !important; opacity:0; pointer-events:none; width:1px !important; height:1px !important; padding:0 !important; }
@@ -238,6 +257,7 @@
 </header>
 
 <button type="button" id="btnNew">+ New damper</button>
+<div id="pasteBar" hidden><div id="pbVal"></div><div id="pbHint" class="hint"></div><button type="button" id="pbDone">Done</button></div>
 <main>
   <section id="projects" hidden>
     <div class="ptop"><h2>Jobs</h2><button type="button" class="secondary small" id="btnBases" aria-label="Refresh jobs">↻</button></div>
@@ -361,7 +381,7 @@
   </div>
 </dialog>
 <dialog id="picker">
-  <h2 id="pkTitle"></h2>
+  <div class="pkhead"><h2 id="pkTitle"></h2><button type="button" id="pkDone">Done</button></div>
   <div id="pkFilters" style="display:none;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
     <select id="pkBld" aria-label="Building"></select>
     <select id="pkFlr" aria-label="Floor"></select>
@@ -378,6 +398,8 @@
     <p>Someone started this damper, but some info is still missing or doesn't match. Tap the damper. The top of the page tells you what to fix.</p>
     <div class="hq"><b>Tap a damper</b></div>
     <p>Opens its page. Fill in what you need, add photos, then tap <b>Save entry</b>. Tap the <b>×</b> to close the page.</p>
+    <div class="hq"><b>Copy and paste in the table</b></div>
+    <p>Hold a cell (for example Inspection Note) until the black bar shows at the bottom. Then tap other cells in the same column to paste it into them. Tap <b>Done</b> when finished.</p>
     <div class="hq"><b>‹ Jobs</b></div>
     <p>Shows every job you can open. Search by job number or hospital, tap ☆ to pin a job to the top, and tap a job to open it.</p>
     <div class="hq"><b>⬇ Offline</b></div>
@@ -548,6 +570,10 @@ function openPicker(f, target) {
   const multi = !!f.multi;
   let sel = []; try { sel = JSON.parse(target.dataset.sel || '[]'); } catch {}
   $('pkClose').textContent = multi ? 'Done' : 'Cancel';
+  // choice lists open as a sheet from the bottom with the choices side by side; the damper list stays a long list
+  const sheet = !f.existing;
+  $('picker').classList.toggle('sheet', sheet); $('pkList').classList.toggle('flow', sheet);
+  $('pkSearch').placeholder = sheet ? 'Find option' : 'Search…';
   $('pkClose').className = multi ? '' : 'secondary';
   const dlg = $('picker'), search = $('pkSearch'), list = $('pkList');
   $('pkTitle').textContent = f.label || f.key;
@@ -573,15 +599,15 @@ function openPicker(f, target) {
     list.textContent = '';
     const changed = () => target.dispatchEvent(new Event('change', { bubbles: true }));
     if (!multi && !f.existing && target.value && !q) { // single choice: a way to empty it again
-      const b = document.createElement('button'); b.type = 'button'; b.className = 'pkitem'; b.style.color = 'var(--muted)'; b.textContent = 'Clear';
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'pkpill pkclear'; b.textContent = 'Clear';
       b.onclick = () => { target.value = ''; dlg.close(); changed(); }; list.append(b);
     }
     hits.slice(0, 1000).forEach((n) => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'pkitem'; b.textContent = n;
-      if (!f.existing) { // colored ovals, with a ✓ on what is picked
-        b.textContent = ''; b.classList.add('pk2'); b.append(pillEl(n, f));
+      if (!f.existing) { // colored ovals side by side, like Airtable, with a ✓ in the picked ones
+        b.textContent = ''; b.className = 'pkpill'; const c = pillEl(n, f); b.append(c);
         const on = multi ? sel.includes(n) : target.value === n;
-        if (on) { const k = document.createElement('span'); k.className = 'ck'; k.textContent = '✓'; b.append(k); }
+        if (on) { const k = document.createElement('span'); k.className = 'ckc'; k.textContent = '✓'; c.append(k); }
       }
       if (multi) {
         if (f.existing) { const on = sel.includes(n); b.textContent = (on ? '✓ ' : '') + n; b.style.fontWeight = on ? '700' : '500'; }
@@ -606,6 +632,8 @@ function openPicker(f, target) {
   if (!typeFirst) { search.blur(); list.focus({ preventScroll: true }); }
 }
 $('pkClose').onclick = () => $('picker').close();
+$('pkDone').onclick = () => $('picker').close();
+$('pbDone').onclick = () => { clip = null; showPasteBar(); };
 
 /* ---------- Damper info card (like the Airtable record view) ---------- */
 // All the text fields are saved on the device (Cache storage) when the lists refresh, so this works offline too
@@ -773,7 +801,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-29-r (test copy)';
+const APP_VERSION = '2026-10-29-s (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1513,6 +1541,64 @@ function openQuick(n, name, dd, recs) {
   if (el && f.multi && !JSON.parse(el.dataset.sel || '[]').length) openPicker(f, el); // nothing chosen yet: go straight to the list
 }
 let gridX = 0;
+/* ---------- Copy and paste in the table: hold a cell to copy it, then tap other cells in that column to paste ---------- */
+let clip = null;
+function holdToCopy(el, fn) {
+  let t = 0, x = 0, y = 0;
+  const stop = () => clearTimeout(t);
+  el.addEventListener('pointerdown', (e) => { delete el.dataset.held; x = e.clientX; y = e.clientY; stop(); t = setTimeout(() => { el.dataset.held = '1'; fn(); }, 500); });
+  el.addEventListener('pointermove', (e) => { if (Math.abs(e.clientX - x) > 8 || Math.abs(e.clientY - y) > 8) stop(); });
+  el.addEventListener('pointerup', stop); el.addEventListener('pointercancel', stop); el.addEventListener('pointerleave', stop);
+  el.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+function copyCell(n, rid, name, dd) {
+  const f = FIELDS.find((x) => norm(x.key) === norm(name) && !x.newOnly && !x.existing);
+  if (!f) { toast('This column can\'t be copied'); return; }
+  const o = getOpts()[f.key] || {}, rev = {};
+  if (o.type === 'multipleRecordLinks' && o.recs) for (const [nm, id] of Object.entries(o.recs)) rev[id] = nm;
+  let v = (((dd && dd.fill) || {})[rid] || {})[f.key];
+  if (v == null || v === '' || (Array.isArray(v) && !v.length)) { toast('Nothing to copy in this cell'); return; }
+  if (f.multi) v = (Array.isArray(v) ? v : [v]).map((x) => rev[x] || x);
+  else if (Array.isArray(v)) v = v[0];
+  clip = { f, v };
+  if (navigator.vibrate) navigator.vibrate(30);
+  showPasteBar();
+}
+function showPasteBar() {
+  const bar = $('pasteBar');
+  if (!clip) { bar.hidden = true; $('btnNew').hidden = !$('projects').hidden; return; }
+  $('pbVal').textContent = ''; const vals = Array.isArray(clip.v) ? clip.v : [clip.v];
+  vals.forEach((v) => $('pbVal').append(pillEl(String(v), clip.f)));
+  $('pbHint').textContent = 'Copied ' + (clip.f.label || clip.f.key) + '. Tap other cells in that column to paste.';
+  bar.hidden = false; $('btnNew').hidden = true;
+}
+async function pasteCell(n, rid, cellEl) {
+  const f = clip.f, o = getOpts()[f.key] || {};
+  const who = (nm) => { const pp = (o.people && o.people[nm]) || {}; return pp.id ? { id: pp.id } : { email: pp.email || nm }; };
+  let val, fillVal, disp;
+  if (f.multi) {
+    const picks = clip.v;
+    if (/Collaborator/.test(o.type || '')) { val = o.type === 'multipleCollaborators' ? picks.map(who) : who(picks[0]); fillVal = picks; }
+    else if (o.type === 'multipleRecordLinks') { val = picks.map((nm) => o.recs && o.recs[nm]).filter(Boolean); fillVal = val; }
+    else if (o.type === 'multipleSelects') { val = picks; fillVal = picks; }
+    else { val = picks[0]; fillVal = picks; }
+    disp = picks.join(', ');
+  } else {
+    const v = String(clip.v);
+    val = f.type === 'number' ? Number(v) : v;
+    if (o.type === 'multipleSelects') val = [v];
+    else if (/Collaborator/.test(o.type || '')) { const w = who(v); val = o.type === 'multipleCollaborators' ? [w] : w; }
+    fillVal = v; disp = v;
+  }
+  const item = { id: crypto.randomUUID(), createdAt: Date.now(), label: n, fields: { [colOf(f.key)]: val }, photos: [], recordId: rid, preset: true, status: 'pending', error: '', base: cfg().base, tbl: tableRef(cfg()) };
+  try { await putItem(item); } catch { toast('Could not save: phone storage may be full.'); return; }
+  const d = await loadDetail();
+  if (d) { ((d.fill ||= {})[rid] ||= {})[f.key] = fillVal; const rc = ((d.recs ||= {})[rid] ||= {}); const k = (d.order || []).find((x) => norm(x) === norm(colOf(f.key))); if (k) rc[k] = disp; await saveDetail(d); }
+  cellEl.style.background = '#d1f7c4';
+  toast('Pasted ✓ ' + n.replace(/^.*· /, ''));
+  clearTimeout(pasteTimer); pasteTimer = setTimeout(async () => { await render(); sync(); }, 700); // redraw once after a run of pastes
+}
+let pasteTimer = 0;
 function renderGrid(list, groups, ctx) {
   const { dd, fillAll, flagged, recs, opOf } = ctx;
   gridUrls.forEach((u) => URL.revokeObjectURL(u)); gridUrls = [];
@@ -1560,7 +1646,12 @@ function renderGrid(list, groups, ctx) {
     const rid = recs[n], r = document.createElement('div'); r.className = 'grow gbody';
     GC.forEach((c, i) => {
       const [kind, name, w] = c, d = cell(w, i === 0);
-      d.onclick = () => (kind === 'id' ? openDamper(n) : openQuick(n, name, dd, recs));
+      d.onclick = () => {
+        if (d.dataset.held) { delete d.dataset.held; return; } // the end of a hold, not a tap
+        if (clip && kind !== 'id' && norm(clip.f.key) === norm(name)) { pasteCell(n, rid, d); return; }
+        if (kind === 'id') openDamper(n); else openQuick(n, name, dd, recs);
+      };
+      if (kind !== 'id' && kind !== 'pic') holdToCopy(d, () => copyCell(n, rid, name, dd));
       if (kind === 'id') {
         if (ix != null) { const no = document.createElement('span'); no.className = 'gnum'; no.textContent = ix + 1; d.append(no); }
         if (flagged(n)) { const dot = document.createElement('span'); dot.className = 'rdot'; d.append(dot); }
