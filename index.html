@@ -665,7 +665,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-29-j';
+const APP_VERSION = '2026-10-29-k';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1452,45 +1452,58 @@ async function renderHome() {
     return { b: i < 0 ? '' : n.slice(0, i), fl: m ? String(parseInt(m[1], 10)) : '' };
   };
   const info = all.map(parts);
-  const bl = [...new Set(info.map((x) => x.b).filter(Boolean))];
   const bSel = $('hBld'), fSel = $('hFlr');
   const mem = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
   const fill = (el, first, vals, fmt, key) => { const cur = el.value || mem(key); el.textContent = ''; [['', first], ...vals.map((v) => [v, fmt ? fmt(v) : v])].forEach(([v, t]) => el.append(new Option(t, v))); el.value = vals.includes(cur) ? cur : ''; };
-  fill(bSel, 'All buildings', bl, (v) => 'Bldg ' + v, 'sel_bld');
-  // the floors offered are the ones in the chosen building
-  const fl = [...new Set(info.filter((x) => !bSel.value || x.b === bSel.value).map((x) => x.fl).filter(Boolean))].sort((a, b) => a - b);
-  fill(fSel, 'Floor', fl, (v) => 'Floor ' + v, 'sel_flr');
-  bSel.style.display = bl.length ? '' : 'none'; fSel.style.display = fl.length ? '' : 'none';
-  $('hFilters').style.display = 'flex';
-  const q = $('hSearch').value.trim().toLowerCase(), bv = bSel.value, fv = fSel.value;
-  // "Missing info" only counts once somebody has started filling the damper in (one of these has a value)
   const fillAll = (dd && dd.fill) || {};
-  // inspector dropdown: everyone who is on at least one damper
   const insOf = (n) => { const v = (fillAll[recs[n]] || {})['Inspector(s)']; return Array.isArray(v) ? v : v ? [v] : []; };
-  const insNames = [...new Set(all.flatMap(insOf))].sort((a, b) => a.localeCompare(b));
-  const iSel = $('hIns');
-  { const cur = iSel.value; iSel.textContent = ''; iSel.append(new Option('Inspector', '')); insNames.forEach((v) => iSel.append(new Option(v, v))); if (insNames.length) iSel.append(new Option('No inspector yet', '__none')); iSel.value = [...insNames, '__none'].includes(cur) ? cur : ''; }
-  iSel.style.display = insNames.length ? '' : 'none';
-  // date chip: newest / oldest order, or only one inspection day
   const dateOf = (n) => String((fillAll[recs[n]] || {})['Inspection Date'] || '').slice(0, 10);
-  const days = [...new Set(all.map(dateOf).filter(Boolean))].sort().reverse();
+  const opOf = (n) => ((fillAll[recs[n]] || {})['Operational Test']) || '';
+  // each chip only offers choices found in the dampers the other chips allow (e.g. Bldg A -> only Bldg A's floors, inspectors, days and results)
+  const iSel = $('hIns'), oSel = $('hOp');
+  const bCur = bSel.value || mem('sel_bld'), fCur = fSel.value || mem('sel_flr'), ivCur = iSel.value, ovCur = oSel.value || mem('sel_op');
+  const dayCur = dateSort.startsWith('d:') ? dateSort.slice(2) : '';
+  const okI = (n) => !ivCur || (ivCur === '__none' ? !insOf(n).length : insOf(n).includes(ivCur));
+  const okD = (n) => !dayCur || dateOf(n) === dayCur;
+  const okO = (n) => !ovCur || opOf(n) === (ovCur === '__none' ? '' : ovCur);
+  const okIDO = (n) => okI(n) && okD(n) && okO(n);
+  const blAll = [...new Set(info.map((x) => x.b).filter(Boolean))];
+  const bl = blAll.filter((b) => b === bCur || all.some((n, i) => info[i].b === b && (!fCur || info[i].fl === fCur) && okIDO(n)));
+  fill(bSel, 'All buildings', bl, (v) => 'Bldg ' + v, 'sel_bld');
+  const fl = [...new Set(info.filter((x, i) => (!bSel.value || x.b === bSel.value) && (x.fl === fCur || okIDO(all[i]))).map((x) => x.fl).filter(Boolean))].sort((a, b) => a - b);
+  fill(fSel, 'Floor', fl, (v) => 'Floor ' + v, 'sel_flr');
+  bSel.style.display = blAll.length ? '' : 'none'; fSel.style.display = fl.length ? '' : 'none';
+  const q = $('hSearch').value.trim().toLowerCase(), bv = bSel.value, fv = fSel.value;
+  const okB = (i) => (!bv || info[i].b === bv) && (!fv || info[i].fl === fv);
+  const poolI = all.filter((n, i) => okB(i) && okD(n) && okO(n));
+  const poolD = all.filter((n, i) => okB(i) && okI(n) && okO(n));
+  const poolO = all.filter((n, i) => okB(i) && okI(n) && okD(n));
+  // inspector chip
+  const insNames = [...new Set(poolI.flatMap(insOf))].sort((a, b) => a.localeCompare(b));
+  if (ivCur && ivCur !== '__none' && !insNames.includes(ivCur)) insNames.push(ivCur);
+  const insAny = all.some((n) => insOf(n).length);
+  { iSel.textContent = ''; iSel.append(new Option('Inspector', '')); insNames.forEach((v) => iSel.append(new Option(v, v))); if (insAny && (poolI.some((n) => !insOf(n).length) || ivCur === '__none')) iSel.append(new Option('No inspector yet', '__none')); iSel.value = [...insNames, '__none'].includes(ivCur) ? ivCur : ''; }
+  iSel.style.display = insAny ? '' : 'none';
+  // date chip: newest / oldest order, or only one inspection day
+  const days = [...new Set(poolD.map(dateOf).filter(Boolean))];
+  if (dayCur && !days.includes(dayCur)) days.push(dayCur);
+  days.sort().reverse();
   const dayTxt = (d) => { const t = new Date(d + 'T12:00'); return isNaN(t) ? d : t.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: t.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }); };
   { const dSel = $('hSort'); dSel.textContent = ''; dSel.append(new Option('Date', ''), new Option('Newest first', 'desc'), new Option('Oldest first', 'asc'));
     if (days.length) { const g = document.createElement('optgroup'); g.label = 'Inspection day'; days.forEach((d) => g.append(new Option(dayTxt(d), 'd:' + d))); dSel.append(g); }
-    if (dateSort.startsWith('d:') && !days.includes(dateSort.slice(2))) dateSort = '';
     dSel.value = dateSort; }
-  const dayV = dateSort.startsWith('d:') ? dateSort.slice(2) : '', order0 = dayV ? '' : dateSort;
-  // test result chip: every result used on any damper, in Airtable's order
-  const opOf = (n) => ((fillAll[recs[n]] || {})['Operational Test']) || '';
+  const dayV = dayCur, order0 = dayV ? '' : dateSort;
+  // test result groups: every result used on any damper, in Airtable's order; the chip lists only the ones in reach
   const opChoices = ((getOpts()['Operational Test'] || {}).choices) || [];
-  const seen = [...new Set(all.map(opOf))].filter(Boolean);
-  const order = [...opChoices.filter((c) => seen.includes(c)), ...seen.filter((c) => !opChoices.includes(c)).sort(), ...(all.some((n) => !opOf(n)) ? [''] : [])];
-  const oSel = $('hOp');
-  { const cur = oSel.value || mem('sel_op'); oSel.textContent = ''; oSel.append(new Option('Test result', '')); order.forEach((v) => oSel.append(new Option(v || 'No test yet', v || '__none'))); oSel.value = order.map((v) => v || '__none').includes(cur) ? cur : ''; }
+  const opOrder = (list) => { const seen = [...new Set(list.map(opOf))].filter(Boolean); return [...opChoices.filter((c) => seen.includes(c)), ...seen.filter((c) => !opChoices.includes(c)).sort(), ...(list.some((n) => !opOf(n)) ? [''] : [])]; };
+  const order = opOrder(all), chipOrder = opOrder(poolO);
+  const curOp = ovCur === '__none' ? '' : ovCur;
+  if (ovCur && !chipOrder.includes(curOp)) chipOrder.push(curOp);
+  { oSel.textContent = ''; oSel.append(new Option('Test result', '')); chipOrder.forEach((v) => oSel.append(new Option(v || 'No test yet', v || '__none'))); oSel.value = order.map((v) => v || '__none').includes(ovCur) ? ovCur : ''; }
   oSel.style.display = order.length ? '' : 'none';
   const ov = oSel.value;
   ['hBld', 'hFlr', 'hIns', 'hSort', 'hOp'].forEach((k) => $(k).classList.toggle('on', !!$(k).value));
-  $('hFilters').style.display = (bl.length > 1 || fl.length > 1 || insNames.length || all.length) ? 'flex' : 'none';
+  $('hFilters').style.display = (blAll.length > 1 || fl.length > 1 || insAny || all.length) ? 'flex' : 'none';
   const iv = iSel.value;
   const STARTED = ['Inspector(s)', 'Inspection Date', 'Inspection Field Notes', 'Operational Test', 'Inspection Note - Select', 'Suggested Follow-up', 'Special Conditions - Inspections'];
   // a photo in any of the photo boxes (not Location Pic) also counts as started
