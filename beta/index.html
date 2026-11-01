@@ -216,6 +216,18 @@
   #detailBody input:focus, #detailBody select:focus, #detailBody textarea:focus { border-color:#2d7ff9; outline:0; background:var(--card); }
   #dOp:empty { display:none; }
   .gbody .gc { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  .gbody .gc img { -webkit-user-drag:none; -webkit-touch-callout:none; pointer-events:none; }
+  #moveBar { position:fixed; left:12px; right:12px; bottom:calc(14px + env(safe-area-inset-bottom)); z-index:7; background:#1b1f24; color:#fff; border-radius:14px; padding:10px 96px 10px 12px; box-shadow:0 6px 20px rgba(0,0,0,.25); font-size:14px; }
+  #moveBar #mvText { font-weight:600; }
+  #moveBar #mvHint { color:#d0d5dd; margin:2px 0 6px; font-size:13px; }
+  #mvKeepL { display:flex; align-items:center; gap:8px; font-size:13px; color:#fff; margin:0; }
+  #mvKeepL input { width:auto; margin:0; }
+  #mvCancel { position:absolute; right:10px; top:50%; transform:translateY(-50%); background:#fff; color:#1b1f24; border:0; border-radius:99px; padding:8px 14px; font-size:15px; }
+  .gc.mvsrc { outline:2px dashed #2d7ff9; outline-offset:-3px; }
+  .gc.mvok { background:#eef5ff !important; }
+  .gc.mvhot { background:#cfe1ff !important; outline:2px solid #2d7ff9; outline-offset:-3px; }
+  .mvghost { position:fixed; z-index:20; width:64px; height:64px; margin:-40px 0 0 -32px; border-radius:10px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,.35); pointer-events:none; background:#fff; display:flex; align-items:center; justify-content:center; font-size:26px; }
+  .mvghost img { width:100%; height:100%; object-fit:cover; }
   #pasteBar { position:fixed; left:12px; right:12px; bottom:calc(14px + env(safe-area-inset-bottom)); z-index:6; background:#1b1f24; color:#fff; border-radius:14px; padding:10px 84px 10px 12px; box-shadow:0 6px 20px rgba(0,0,0,.25); }
   #pasteBar #pbVal { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:4px; }
   #pasteBar #pbHint { color:#d0d5dd; margin:0; font-size:13px; }
@@ -257,6 +269,7 @@
 </header>
 
 <button type="button" id="btnNew">+ New damper</button>
+<div id="moveBar" hidden><div id="mvText"></div><div id="mvHint" class="hint"></div><label id="mvKeepL"><input type="checkbox" id="mvKeep"> Keep a copy in the old box too</label><button type="button" id="mvCancel">Cancel</button></div>
 <div id="pasteBar" hidden><div id="pbVal"></div><div id="pbHint" class="hint"></div><button type="button" id="pbDone">Done</button></div>
 <main>
   <section id="projects" hidden>
@@ -400,6 +413,8 @@
     <p>Opens its page. Fill in what you need, add photos, then tap <b>Save entry</b>. Tap the <b>×</b> to close the page.</p>
     <div class="hq"><b>Copy and paste in the table</b></div>
     <p>Hold a cell (for example Inspection Note) until the black bar shows at the bottom. Then tap other cells in the same column to paste it into them. Tap <b>Done</b> when finished.</p>
+    <div class="hq"><b>Move a photo to another box</b></div>
+    <p>In the table, hold a photo until it lifts up, then drag it onto the right photo box in the same row (or let go and tap the box). Tick <b>Keep a copy</b> to copy it instead of moving it.</p>
     <div class="hq"><b>‹ Jobs</b></div>
     <p>Shows every job you can open. Search by job number or hospital, tap ☆ to pin a job to the top, and tap a job to open it.</p>
     <div class="hq"><b>⬇ Offline</b></div>
@@ -634,6 +649,8 @@ function openPicker(f, target) {
 $('pkClose').onclick = () => $('picker').close();
 $('pkDone').onclick = () => $('picker').close();
 $('pbDone').onclick = () => { clip = null; showPasteBar(); };
+$('mvCancel').onclick = () => { moving = null; showMoveBar(); };
+$('mvKeep').onchange = () => { if (moving) moving.keep = $('mvKeep').checked; };
 
 /* ---------- Damper info card (like the Airtable record view) ---------- */
 // All the text fields are saved on the device (Cache storage) when the lists refresh, so this works offline too
@@ -801,7 +818,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-10-29-t (test copy)';
+const APP_VERSION = '2026-11-01-a (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1202,7 +1219,15 @@ function makeField(f) {
   l.textContent = (f.label || f.key) + (f.required ? ' *' : '');
   l.htmlFor = fid(f.key);
   let el;
-  if (f.type === 'textarea') el = document.createElement('textarea');
+  if (f.type === 'textarea') {
+    el = document.createElement('textarea');
+    if (norm(f.key) === norm(NOTES_FIELD)) el.addEventListener('focus', () => { // an empty notes box starts with "10/13/26 AP"
+      if (el.value.trim()) return;
+      const ins = $(fid('Inspector(s)')), dt = $(fid('Inspection Date'));
+      const h = noteHead(ins ? pickedOf(ins, FIELDS.find((x) => x.key === 'Inspector(s)')) : [], dt ? dt.value : '');
+      if (h) { el.value = h; el.setSelectionRange(h.length, h.length); scheduleDraft(); }
+    });
+  }
   else if (f.type === 'select') {
     const o = getOpts()[f.key], list = (o && o.choices) || [];
     if (f.existing && list.length) { // the chosen damper: tap to go back to the list
@@ -1488,7 +1513,10 @@ function openQuick(n, name, dd, recs) {
     $('picker').addEventListener('close', function h() { drawChips(); if (!q.open) $('picker').removeEventListener('close', h); });
     drawChips();
     body.append(chipsBox, add, el);
-  } else if (f.type === 'textarea') { el = document.createElement('textarea'); el.value = cur[f.key] || ''; el.style.minHeight = '140px'; body.append(el); }
+  } else if (f.type === 'textarea') {
+    el = document.createElement('textarea'); el.value = cur[f.key] || ''; el.style.minHeight = '140px'; body.append(el);
+    if (!el.value.trim() && norm(f.key) === norm(NOTES_FIELD)) { const ins = cur['Inspector(s)']; el.value = noteHead(Array.isArray(ins) ? ins : ins ? [ins] : [], cur['Inspection Date'] || ''); }
+  }
   else if (f.type === 'select' && (o.choices || []).length && !/Collaborator/.test(o.type || '')) {
     el = document.createElement('select'); el.append(new Option('', '')); o.choices.forEach((c) => el.append(new Option(c, c))); el.value = cur[f.key] || ''; body.append(el);
   } else { el = document.createElement('input'); el.type = f.type === 'date' ? 'date' : f.type === 'number' ? 'number' : 'text'; el.value = cur[f.key] || (f.type === 'date' ? today() : ''); body.append(el); }
@@ -1550,9 +1578,18 @@ function openQuick(n, name, dd, recs) {
   }
   q.showModal();
   if (el && !f.multi) el.focus();
+  if (el && el.tagName === 'TEXTAREA') el.setSelectionRange(el.value.length, el.value.length); // type after the heading
   if (el && f.multi && !JSON.parse(el.dataset.sel || '[]').length) openPicker(f, el); // nothing chosen yet: go straight to the list
 }
 let gridX = 0;
+// Field notes start with the inspection date and the inspectors' initials, e.g. "10/13/26 AP" (only when both are filled in)
+const NOTES_FIELD = 'Inspection Field Notes';
+function noteHead(people, date) {
+  const m = String(date || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const ini = (people || []).map((p) => String(p).trim().split(/\s+/).filter(Boolean).map((w) => w[0].toUpperCase()).join('')).filter(Boolean);
+  if (!m || !ini.length) return '';
+  return `${+m[2]}/${+m[3]}/${m[1].slice(2)} ${ini.join('/')}\n`;
+}
 /* ---------- Copy and paste in the table: hold a cell to copy it, then tap other cells in that column to paste ---------- */
 let clip = null;
 function holdToCopy(el, fn) {
@@ -1611,6 +1648,79 @@ async function pasteCell(n, rid, cellEl) {
   clearTimeout(pasteTimer); pasteTimer = setTimeout(async () => { await render(); sync(); }, 700); // redraw once after a run of pastes
 }
 let pasteTimer = 0;
+/* ---------- Moving photos in the table: hold a photo, then drag it (or tap) onto another photo box in the same row ---------- */
+let moving = null;
+function pickPhoto(n, rid, box, col, atts, cell) {
+  moving = { n, rid, box, col, atts: atts.map((a) => ({ ...a })), keep: false, cell };
+  if (navigator.vibrate) navigator.vibrate(30);
+  cell.classList.add('mvsrc');
+  showMoveBar();
+  startDrag(cell);
+}
+function showMoveBar() {
+  const bar = $('moveBar');
+  document.querySelectorAll('.mvok').forEach((e) => e.classList.remove('mvok'));
+  if (!moving) { bar.hidden = true; document.querySelectorAll('.mvsrc').forEach((e) => e.classList.remove('mvsrc')); $('btnNew').hidden = !$('projects').hidden || !!clip; return; }
+  document.querySelectorAll('.gc[data-pic]').forEach((e) => { if (e.dataset.row === moving.rid && e.dataset.pic !== moving.box) e.classList.add('mvok'); });
+  $('mvText').textContent = (moving.atts.length > 1 ? moving.atts.length + ' photos' : 'Photo') + ' from ' + moving.box + ' · ' + moving.n.replace(/^.*· /, '');
+  $('mvHint').textContent = 'Drag onto another photo box in this row, or tap one.';
+  $('mvKeep').checked = moving.keep;
+  bar.hidden = false; $('btnNew').hidden = true;
+}
+// follow the finger with a small copy of the photo; the page does not scroll while dragging
+function startDrag(cell) {
+  const img = cell.querySelector('img'), ghost = document.createElement('div'); ghost.className = 'mvghost';
+  if (img && img.src) { const g = document.createElement('img'); g.src = img.src; ghost.append(g); } else ghost.textContent = '📎';
+  document.body.append(ghost);
+  let over = null, moved = false;
+  const at = (x, y) => { ghost.style.left = x + 'px'; ghost.style.top = y + 'px';
+    const el = document.elementFromPoint(x, y), c = el && el.closest('.gc.mvok');
+    if (over !== c) { if (over) over.classList.remove('mvhot'); over = c; if (c) c.classList.add('mvhot'); }
+    // near the left or right edge: scroll the table sideways
+    const w = cell.closest('.gridwrap'), r = w && w.getBoundingClientRect();
+    if (r) { if (x > r.right - 30) w.scrollLeft += 12; else if (x < r.left + 160) w.scrollLeft -= 12; } };
+  const pt = (e) => (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
+  const move = (e) => { moved = true; if (e.cancelable) e.preventDefault(); const p = pt(e); at(p.clientX, p.clientY); };
+  let ended = false;
+  const end = () => {
+    if (ended) return; ended = true;
+    document.removeEventListener('touchmove', move); document.removeEventListener('mousemove', move); document.removeEventListener('pointermove', move);
+    document.removeEventListener('touchend', end); document.removeEventListener('mouseup', end); document.removeEventListener('pointerup', end);
+    ghost.remove();
+    if (over) { over.classList.remove('mvhot'); dropPhoto(over); }
+    // let go somewhere else: stay picked up so a tap on a box still works
+  };
+  const r0 = cell.getBoundingClientRect(); at(r0.left + r0.width / 2, r0.top + r0.height / 2);
+  document.addEventListener('touchmove', move, { passive: false }); document.addEventListener('mousemove', move); document.addEventListener('pointermove', move);
+  document.addEventListener('touchend', end); document.addEventListener('mouseup', end); document.addEventListener('pointerup', end);
+}
+async function dropPhoto(cell) {
+  const m = moving; if (!m) return;
+  if (cell.dataset.row !== m.rid || cell.dataset.pic === m.box) { toast('Pick a different photo box in the same row'); return; }
+  moving = null; showMoveBar();
+  const dst = cell.dataset.pic, dstCol = getNames()[dst] || dst;
+  const item = { id: crypto.randomUUID(), createdAt: Date.now(), kind: 'move', label: m.n + ' · photo to ' + dst, fields: {}, photos: [], recordId: m.rid, preset: true, status: 'pending', error: '',
+    src: m.col, dst: dstCol, ids: m.atts.map((a) => a.id), keep: m.keep, base: cfg().base, tbl: tableRef(cfg()) };
+  try { await putItem(item); } catch { toast('Could not save: phone storage may be full.'); return; }
+  // show it in the new box right away
+  const d = await loadDetail();
+  if (d) { const ps = ((d.pics ||= {})[m.rid] ||= {}); const dk = Object.keys(ps).find((k) => norm(k) === norm(dstCol)) || dstCol;
+    ps[dk] = [...(ps[dk] || []), ...m.atts]; if (!m.keep) ps[m.col] = (ps[m.col] || []).filter((a) => !item.ids.includes(a.id)); await saveDetail(d); }
+  toast((m.keep ? 'Copied' : 'Moved') + ' to ' + dst + ' ✓');
+  await render(); sync();
+}
+// in Airtable: put the photos in the new box and (unless keeping a copy) take them out of the old one, in one change
+async function syncMove(it, c) {
+  const B = it.base || c.base, T = it.tbl || tableRef(c), H = { headers: { Authorization: 'Bearer ' + c.token } };
+  const r = await airtableGet(`https://api.airtable.com/v0/${B}/${encodeURIComponent(T)}?filterByFormula=${encodeURIComponent(`RECORD_ID()='${it.recordId}'`)}&fields%5B%5D=${encodeURIComponent(it.src)}&fields%5B%5D=${encodeURIComponent(it.dst)}`, H);
+  if (!r.ok) { const e = new Error(r.status + ' could not read the photos'); e.status = r.status; throw e; }
+  const f = (((await r.json()).records || [])[0] || {}).fields || {};
+  const src = f[it.src] || [], dst = f[it.dst] || [], go = src.filter((a) => it.ids.includes(a.id));
+  if (!go.length) return; // already moved (or removed in Airtable meanwhile)
+  const body = { [it.dst]: [...dst.map((a) => ({ id: a.id })), ...go.map((a) => ({ url: a.url, filename: a.filename }))] };
+  if (!it.keep) body[it.src] = src.filter((a) => !it.ids.includes(a.id)).map((a) => ({ id: a.id }));
+  await api(`https://api.airtable.com/v0/${B}/${encodeURIComponent(T)}/${it.recordId}`, { fields: body }, 'PATCH');
+}
 function renderGrid(list, groups, ctx) {
   const { dd, fillAll, flagged, recs, opOf } = ctx;
   gridUrls.forEach((u) => URL.revokeObjectURL(u)); gridUrls = [];
@@ -1664,6 +1774,7 @@ function renderGrid(list, groups, ctx) {
         if (kind === 'id') openDamper(n); else openQuick(n, name, dd, recs);
       };
       if (kind !== 'id' && kind !== 'pic') holdToCopy(d, () => copyCell(n, rid, name, dd));
+      if (kind === 'pic') { const tap = d.onclick; d.onclick = (e) => { if (moving && !d.dataset.held) { dropPhoto(d); return; } tap(e); }; }
       if (kind === 'id') {
         if (ix != null) { const no = document.createElement('span'); no.className = 'gnum'; no.textContent = ix + 1; d.append(no); }
         if (flagged(n)) { const dot = document.createElement('span'); dot.className = 'rdot'; d.append(dot); }
@@ -1672,8 +1783,10 @@ function renderGrid(list, groups, ctx) {
         const v = name === 'Operational Test' ? opOf(n) : val(rid, name); if (v) d.append(chipEl(v));
       } else if (kind === 'pic') {
         const ps = ((dd && dd.pics) || {})[rid] || {}, key = Object.keys(ps).find((k) => norm(k) === picKey[name]), at = key ? ps[key] : [];
+        d.dataset.pic = name; d.dataset.row = rid;
         if (at.length) {
-          const im = document.createElement('img'); im.dataset.aid = at[0].id; im.dataset.u = at[0].u || ''; im.alt = ''; d.append(im); gridObs.observe(im);
+          holdToCopy(d, () => pickPhoto(n, rid, name, key, at, d));
+          const im = document.createElement('img'); im.dataset.aid = at[0].id; im.dataset.u = at[0].u || ''; im.alt = ''; im.draggable = false; d.append(im); gridObs.observe(im);
           if (at.length > 1) { const b = document.createElement('span'); b.className = 'gbadge'; b.textContent = at.length; d.append(b); }
         }
       } else if (kind === 'multi') {
@@ -1718,6 +1831,7 @@ function renderGrid(list, groups, ctx) {
   list.append(wrap);
   wrap.scrollLeft = gridX; // stay where you scrolled to when the list refreshes itself
   wrap.addEventListener('scroll', () => { gridX = wrap.scrollLeft; }, { passive: true });
+  if (moving) showMoveBar(); // keep the boxes you can drop on marked after a refresh
   const setW = () => wrap.style.setProperty('--vw', wrap.clientWidth + 'px');
   setW(); requestAnimationFrame(setW);
 }
@@ -2104,6 +2218,7 @@ async function sync(manual) {
     const items = (await allItems()).filter((i) => i.status !== 'synced').reverse();
     for (const it of items) {
       try {
+        if (it.kind === 'move') { await syncMove(it, c); it.status = 'synced'; it.error = ''; it.errCode = 0; await putItem(it); continue; }
         // 1) create the record once; remember its id so a retry never duplicates it
         if (!it.recordId) {
           const res = await api(`https://api.airtable.com/v0/${it.base || c.base}/${encodeURIComponent(it.tbl || tableRef(c))}`,
