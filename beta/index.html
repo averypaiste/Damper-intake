@@ -215,6 +215,17 @@
   #detailBody input, #detailBody select, #detailBody textarea { border-color:transparent; background:var(--bg); }
   #detailBody input:focus, #detailBody select:focus, #detailBody textarea:focus { border-color:#2d7ff9; outline:0; background:var(--card); }
   #dOp:empty { display:none; }
+  /* computers and tablets: use the room instead of staying phone-sized */
+  @media (min-width:760px) {
+    main { max-width:min(1500px, 100%); padding:20px 24px; }
+    #detail { max-width:880px; width:92%; }
+    #quick { max-width:640px; }
+    dialog { max-width:600px; }
+    html #picker.sheet[open] { left:0; right:0; width:100%; max-width:680px; margin:0 auto; border-radius:16px 16px 0 0; }
+    #pasteBar, #moveBar { max-width:640px; margin:0 auto; }
+    .gc { font-size:14px; }
+  }
+  @media (min-width:1200px) { #detail { max-width:1000px; } }
   .gbody .gc { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
   .gbody .gc img { -webkit-user-drag:none; -webkit-touch-callout:none; pointer-events:none; }
   #moveBar { position:fixed; left:12px; right:12px; bottom:calc(14px + env(safe-area-inset-bottom)); z-index:7; background:#1b1f24; color:#fff; border-radius:14px; padding:10px 96px 10px 12px; box-shadow:0 6px 20px rgba(0,0,0,.25); font-size:14px; }
@@ -818,7 +829,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-01-a (test copy)';
+const APP_VERSION = '2026-11-02-a (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
