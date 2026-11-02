@@ -108,6 +108,24 @@
   #toast { position:fixed; left:50%; bottom:calc(84px + env(safe-area-inset-bottom)); transform:translateX(-50%); background:#1b1f24; color:#fff; padding:10px 16px; border-radius:99px; font-size:14px; font-weight:600; z-index:30; max-width:90vw; text-align:center; }
   #editBar { background:#fff4e5; color:#7a3e00; border-radius:8px; padding:8px 12px; margin:10px 0 0; font-size:14px; display:flex; align-items:center; gap:8px; }
   #editBar span { flex:1; }
+  /* computer / tablet: use the whole screen instead of a phone-width strip */
+  @media (min-width:820px) {
+    body { font-size:17px; }
+    header { padding:12px 32px; } #ttl b { font-size:18px; } #ttl span { font-size:13px; } header button { height:40px; font-size:15px; padding:0 14px; }
+    #dHead, main { max-width:1180px; padding-left:32px; padding-right:32px; }
+    #dHead { padding-top:20px; } #dTitle { font-size:24px; }
+    main { display:grid; grid-template-columns:1fr 1fr; column-gap:36px; align-items:start; padding-bottom:120px; }
+    main > .sect, main > #editBar, main > .hint, main > #photos, main > .fld:has(textarea), main > .fld:has(.stat), main > .fld:has(.three), main > .fld:has([data-k=notes]), main > .fld:has([data-k=follow]) { grid-column:1 / -1; }
+    .sect { font-size:13px; margin-top:32px; }
+    label, .lbl, .pblock .ph2 { font-size:14px; }
+    .stat .chip { font-size:16px; padding:9px 18px; }
+    #photos { display:grid; grid-template-columns:repeat(3, 1fr); column-gap:24px; }
+    .thumb { width:110px; height:110px; }
+    #bar { justify-content:center; } #bar button { flex:0 1 200px; } #bar #bSave { flex:0 1 320px; }
+    dialog.sheet[open] { left:50%; transform:translateX(-50%); max-width:760px; }
+    dialog { max-width:620px; }
+  }
+  @media (min-width:1300px) { #photos { grid-template-columns:repeat(6, 1fr); } }
   @media (prefers-color-scheme: dark) { #editBar { background:#3a2a12; color:#ffd8a8; } }
 </style>
 </head>
@@ -215,7 +233,7 @@
 <div id="toast" hidden></div>
 
 <script>
-const APP_VERSION = '2026-11-02-a (simple)';
+const APP_VERSION = '2026-11-02-b (simple)';
 const $ = (id) => document.getElementById(id);
 const P = 'simple:'; // keeps its own saved data apart from the main tool and the test copy
 const ls = {
