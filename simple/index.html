@@ -102,6 +102,11 @@
   .pkitem small { display:block; color:var(--muted); font-weight:400; font-size:13px; }
   .pkitem .last { float:right; font-size:12px; color:var(--muted); font-weight:500; }
   .pknew { color:var(--blue); }
+  .mapi { border-top:1px solid var(--line); padding:12px 0; }
+  .mapi:first-child { border-top:0; }
+  .mapi b { display:block; word-break:break-word; }
+  .mapi span { display:block; font-size:13px; color:var(--muted); }
+  .mapi .mb { display:flex; gap:8px; margin-top:8px; } .mapi .mb button { flex:1; padding:10px; }
   .dlgbtns { display:flex; gap:8px; margin-top:14px; } .dlgbtns > * { flex:1; }
   .opt { display:block; width:100%; text-align:left; margin-top:8px; }
   .opt small { display:block; font-weight:400; opacity:.85; }
@@ -132,6 +137,7 @@
 <body>
 <header id="hdr">
   <div id="ttl"><b id="jobTitle">Damper form</b><span id="net">Online</span></div>
+  <button type="button" id="bMap" hidden>🗺 Map</button>
   <button type="button" id="bSaved">Saved <span id="savedN">0</span></button>
   <button type="button" id="bSettings" aria-label="Settings">⚙</button>
 </header>
@@ -194,6 +200,13 @@
   <div id="svList" style="flex:1 1 auto;min-height:0;overflow-y:auto"></div>
 </dialog>
 
+<dialog id="mapDlg" class="sheet">
+  <div class="pkhead"><h2>Job maps</h2><button type="button" id="mapClose">Done</button></div>
+  <p class="hint" id="mapHint" style="margin:0 0 6px"></p>
+  <div id="mapList" style="flex:1 1 auto;min-height:0;overflow-y:auto"></div>
+  <button type="button" class="secondary small" id="mapRefresh" style="margin-top:10px">↻ Check for a newer map</button>
+</dialog>
+
 <dialog id="entryDlg">
   <h2 id="enTitle" style="margin:0 0 4px;font-size:18px"></h2>
   <p class="hint" id="enSub" style="margin:0"></p>
@@ -233,7 +246,7 @@
 <div id="toast" hidden></div>
 
 <script>
-const APP_VERSION = '2026-11-02-b (simple)';
+const APP_VERSION = '2026-11-02-c (simple)';
 const $ = (id) => document.getElementById(id);
 const P = 'simple:'; // keeps its own saved data apart from the main tool and the test copy
 const ls = {
@@ -386,7 +399,7 @@ async function cleanupPhotos() {
   const used = new Set();
   const add = (o) => Object.values((o && o.photos) || {}).forEach((a) => a.forEach((k) => used.add(k)));
   add(F); ls.get('entries', []).forEach(add);
-  try { const keys = await idb('readonly', (s) => s.getAllKeys()); for (const k of keys || []) if (!used.has(k)) { await delPhoto(k); urls.delete(k); } } catch {}
+  try { const keys = await idb('readonly', (s) => s.getAllKeys()); for (const k of keys || []) if (!used.has(k) && !String(k).startsWith('map:')) { await delPhoto(k); urls.delete(k); } } catch {}
 }
 
 /* ---------- Pick lists (sheet from the bottom, like the Airtable app) ---------- */
@@ -703,11 +716,92 @@ async function loadDampers() {
     }
     dampers.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
     if (!ls.set('job', { base: c.base, name, at: Date.now(), dampers, choices: ch })) throw new Error('Not enough room on this phone for the list');
-    $('sMsg').textContent = dampers.length + ' dampers saved on this phone. Works offline now.';
+    $('sMsg').textContent = dampers.length + ' dampers saved. Getting the job map…';
     showJob(); render();
+    const mm = await loadMaps(meta, (t) => ($('sMsg').textContent = t));
+    $('sMsg').textContent = dampers.length + ' dampers' + (mm ? ' and ' + mm + (mm === 1 ? ' map' : ' maps') : '') + ' saved on this phone. Works offline now.';
   } catch (e) { $('sMsg').textContent = e.message || String(e); }
   finally { $('sLoad').disabled = false; }
 }
+/* ---------- Job map: PDFs from the job's Drawing table, kept on this phone (read only) ---------- */
+const mapsOf = () => ls.get('maps', { base: '', at: 0, list: [] });
+async function loadMaps(meta, say) {
+  const c = cfg(), j = job(); if (!j || !c.token) return 0;
+  say = say || (() => {});
+  if (!meta) meta = await aget(`https://api.airtable.com/v0/meta/bases/${c.base}/tables`);
+  const t = meta.tables.find((x) => /^drawings?$/i.test(x.name.trim())) || meta.tables.find((x) => /drawing/i.test(x.name));
+  const old = mapsOf(), keep = old.base === c.base ? old.list : [];
+  if (!t) { ls.set('maps', { base: c.base, at: Date.now(), list: [] }); renderMapBtn(); return 0; }
+  const v = (t.views || []).find((x) => /^grid view$/i.test(x.name.trim()));
+  const attF = t.fields.filter((f) => f.type === 'multipleAttachments');
+  const revF = t.fields.find((f) => /revision/i.test(f.name) && /date/i.test(f.type));
+  const list = []; let off = '';
+  for (let i = 0; i < 10; i++) {
+    const r = await aget(`https://api.airtable.com/v0/${c.base}/${t.id}?pageSize=100&returnFieldsByFieldId=true${v ? '&view=' + encodeURIComponent(v.id) : ''}${off ? '&offset=' + encodeURIComponent(off) : ''}`);
+    for (const rec of r.records) for (const f of attF) for (const a of rec.fields[f.id] || []) {
+      if (!/pdf/i.test(a.type || '') && !/\.pdf$/i.test(a.filename || '')) continue;
+      list.push({ id: a.id, name: esc(rec.fields[t.primaryFieldId]).trim(), field: f.name, filename: a.filename || 'map.pdf', size: a.size || 0, rev: revF ? esc(rec.fields[revF.id]) : '', url: a.url });
+    }
+    if (!r.offset) break; off = r.offset;
+  }
+  // download each PDF once; a changed map comes with a new attachment id
+  let n = 0;
+  for (const m of list) {
+    n++;
+    const had = keep.find((k) => k.id === m.id && k.saved);
+    if (had) { m.saved = true; continue; }
+    say('Downloading map ' + n + ' of ' + list.length + '…');
+    try { const r = await fetch(m.url); if (!r.ok) throw new Error(r.status); await putPhoto('map:' + m.id, await r.blob()); m.saved = true; }
+    catch { m.saved = false; }
+  }
+  for (const k of keep) if (!list.some((m) => m.id === k.id)) { try { await delPhoto('map:' + k.id); } catch {} }
+  if (old.base && old.base !== c.base) for (const k of old.list) { try { await delPhoto('map:' + k.id); } catch {} }
+  ls.set('maps', { base: c.base, at: Date.now(), list: list.map(({ url, ...m }) => m) });
+  renderMapBtn();
+  return list.filter((m) => m.saved).length;
+}
+function renderMapBtn() { const m = mapsOf(), j = job(); $('bMap').hidden = !(j && m.base === j.base && m.list.length); }
+async function mapFile(m) { const b = await getPhoto('map:' + m.id); return b ? new File([b], m.filename, { type: 'application/pdf' }) : null; }
+function renderMaps() {
+  const m = mapsOf(), box = $('mapList'); box.textContent = '';
+  $('mapHint').textContent = m.at ? 'Saved on this phone, so it opens without signal. Last checked ' + new Date(m.at).toLocaleString() + '.' : '';
+  for (const it of m.list) {
+    const d = document.createElement('div'); d.className = 'mapi';
+    const b = document.createElement('b'); b.textContent = it.filename;
+    const s = document.createElement('span'); s.textContent = [it.name, it.field, it.rev && 'Revised ' + it.rev, it.size && (it.size / 1e6).toFixed(1) + ' MB', it.saved ? '' : 'not downloaded yet'].filter(Boolean).join(' · ');
+    const mb = document.createElement('div'); mb.className = 'mb';
+    const o = document.createElement('button'); o.type = 'button'; o.textContent = 'Open';
+    const sv = document.createElement('button'); sv.type = 'button'; sv.className = 'secondary'; sv.textContent = 'Save to Files';
+    o.onclick = async () => {
+      const f = await mapFile(it); if (!f) { toast('Not on this phone yet. Tap Check for a newer map.'); return; }
+      const u = URL.createObjectURL(f); const w = window.open(u, '_blank'); if (!w) location.href = u; setTimeout(() => URL.revokeObjectURL(u), 300000);
+    };
+    sv.onclick = async () => {
+      const f = await mapFile(it); if (!f) { toast('Not on this phone yet. Tap Check for a newer map.'); return; }
+      if (navigator.canShare && navigator.canShare({ files: [f] })) { try { await navigator.share({ files: [f] }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    };
+    mb.append(o, sv); d.append(b, s, mb); box.append(d);
+  }
+  if (!m.list.length) box.innerHTML = '<p class="hint">No map found in this job\'s Drawing table.</p>';
+}
+$('bMap').onclick = () => { renderMaps(); $('mapDlg').showModal(); };
+$('mapClose').onclick = () => $('mapDlg').close();
+$('mapRefresh').onclick = async () => {
+  if (!navigator.onLine) { toast('Needs a connection'); return; }
+  $('mapRefresh').disabled = true;
+  try { await loadMaps(null, (t) => ($('mapHint').textContent = t)); renderMaps(); toast('Map is up to date'); }
+  catch (e) { $('mapHint').textContent = e.message || String(e); }
+  finally { $('mapRefresh').disabled = false; }
+};
+// check for a newer map quietly when the page opens, at most every 6 hours
+function autoMaps() {
+  const m = mapsOf(), j = job();
+  if (!j || !cfg().token || !navigator.onLine) return;
+  if (m.base === j.base && Date.now() - m.at < 6 * 3600e3 && m.list.every((x) => x.saved)) return;
+  loadMaps().catch(() => {});
+}
+
 function showJob() {
   const j = job();
   $('jobTitle').textContent = j ? j.name : 'Damper form';
@@ -725,7 +819,7 @@ function net() { const on = navigator.onLine; $('hdr').classList.toggle('off', !
 addEventListener('online', net); addEventListener('offline', net);
 
 $('ver').textContent = 'Version ' + APP_VERSION;
-net(); showJob(); render();
+net(); showJob(); render(); renderMapBtn(); setTimeout(autoMaps, 1500);
 if (!job() && !ls.get('seenSetup', false)) { ls.set('seenSetup', true); setTimeout(() => $('bSettings').click(), 300); }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>

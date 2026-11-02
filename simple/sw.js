@@ -1,5 +1,5 @@
 // Keeps the app available offline. Online: always fetch the newest files. Offline: use the saved copy.
-const CACHE = 'simple-v2';
+const CACHE = 'simple-v3';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
