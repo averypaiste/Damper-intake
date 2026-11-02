@@ -541,8 +541,10 @@ const colOf = (k) => getNames()[k] || k;
 // Columns Airtable calculates by itself: nothing can be written to them
 const COMPUTED = /^(formula|rollup|multipleLookupValues|count|createdTime|lastModifiedTime|autoNumber|button|createdBy|lastModifiedBy|externalSyncSource|aiText)$/;
 // If two columns have almost the same name (say a link column and a lookup copy of it), use the one that can be edited
-const findField = (t, name) => {
-  const loose = t.fields.filter((x) => norm(x.name) === norm(name));
+// ok: when several columns share a name (e.g. 📋 and 🛠️ "Inspection Note - Select🔗"), prefer the ones it allows (shown in the Tech View)
+const findField = (t, name, ok) => {
+  let loose = t.fields.filter((x) => norm(x.name) === norm(name));
+  if (ok) { const shown = loose.filter((x) => ok(x) && !COMPUTED.test(x.type)); if (shown.length) loose = shown; }
   return loose.find((x) => !COMPUTED.test(x.type) && x.name === name) || loose.find((x) => !COMPUTED.test(x.type)) || loose.find((x) => x.name === name) || loose[0];
 };
 // Use the table's exact ID once it is known (names must match capitals exactly, IDs always do)
@@ -836,7 +838,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-02-c (test copy)';
+const APP_VERSION = '2026-11-02-d (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -908,19 +910,19 @@ async function refreshOptionsInner(manual) {
     const visIds = vobj && Array.isArray(vobj.visibleFieldIds) ? new Set(vobj.visibleFieldIds) : null;
     const vis = (fd) => !visIds || visIds.has(fd.id) || fd.id === t.primaryFieldId;
     const hiddenNames = [...new Set([...FIELDS.filter((f) => !f.existing && !f.newOnly).map((f) => f.key), ...PHOTOS, ...INFO_FIELDS, MISS_FIELD])]
-      .filter((n) => { const fd = findField(t, n); return fd && !vis(fd); });
+      .filter((n) => { const fd = findField(t, n, vis); return fd && !vis(fd); });
     localStorage.setItem('hidden', JSON.stringify(hiddenNames));
     const viewQ = vid ? '&view=' + encodeURIComponent(vid) : ''; // a picked view (e.g. one building's Tech View) shows only its rows
     const out = {}, missing = [], problems = [], names = {}, notes = [];
     let pendingDetail = null, pendingRaw = {};
     for (const f of FIELDS) {
       if (f.type !== 'select') { // plain fields: just find the exact column name
-        const fl = findField(t, f.key);
+        const fl = findField(t, f.key, vis);
         if (fl) names[f.key] = fl.name; else missing.push(f.key);
         continue;
       }
       const want = f.existing && c.idField ? c.idField : f.key;
-      const fld = f.existing && !c.idField ? await pickIdColumn(t, c, viewQ) : findField(t, want);
+      const fld = f.existing && !c.idField ? await pickIdColumn(t, c, viewQ) : findField(t, want, vis);
       if (!fld) { missing.push(want); continue; }
       names[f.key] = fld.name;
       if (!f.existing && COMPUTED.test(fld.type)) problems.push('"' + fld.name + '" is a calculated column in Airtable (' + fld.type + '), so nothing can be saved to it. Is there another column with a similar name?');
@@ -950,7 +952,7 @@ async function refreshOptionsInner(manual) {
         out[f.key].choices = Object.keys(recs).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
       }
       if (f.existing) {
-        const bld = findField(t, 'Building');
+        const bld = findField(t, 'Building', vis);
         const bcol = bld && bld.name !== fld.name ? bld : null;
         const rows = [];
         // Linked-record fields only come back as record IDs, so look up the names in the linked tables
@@ -988,9 +990,9 @@ async function refreshOptionsInner(manual) {
           return String(v);
         };
         const det = {}, rawFill = {}, flags = {};
-        const missCol0 = findField(t, MISS_FIELD), missCol = missCol0 && vis(missCol0) ? missCol0 : null;
+        const missCol0 = findField(t, MISS_FIELD, vis), missCol = missCol0 && vis(missCol0) ? missCol0 : null;
         // the form's own fields are fetched too, so they can be filled in from what Airtable already has
-        const fillCols = FIELDS.filter((x) => !x.existing && !x.newOnly).map((x) => ({ key: x.key, fd: findField(t, x.key) })).filter((x) => x.fd && vis(x.fd));
+        const fillCols = FIELDS.filter((x) => !x.existing && !x.newOnly).map((x) => ({ key: x.key, fd: findField(t, x.key, vis) })).filter((x) => x.fd && vis(x.fd));
         const wantCols = [...new Set([fld.name, ...(bcol ? [bcol.name] : []), ...showCols.map((x) => x.name), ...fillCols.map((x) => x.fd.name), ...(missCol ? [missCol.name] : [])])];
         const colsQ = wantCols.map((n) => '&fields%5B%5D=' + encodeURIComponent(n)).join('');
         let offset = '', scanned = 0;
@@ -1106,7 +1108,7 @@ async function refreshOptionsInner(manual) {
       savePhotos(c, t, viewQ, pendingDetail.photos); // runs in the background
     }
     const noPics = [];
-    for (const name of PHOTOS) { const fl = findField(t, name); if (fl) names[name] = fl.name; if (!fl || !vis(fl)) noPics.push(name); }
+    for (const name of PHOTOS) { const fl = findField(t, name, vis); if (fl) names[name] = fl.name; if (!fl || !vis(fl)) noPics.push(name); }
     localStorage.setItem('noPics', JSON.stringify(noPics)); showPhotoBlocks();
     if (noPics.length && !visIds) notes.unshift('This table has no ' + noPics.join(', ') + ' column, so ' + (noPics.length > 1 ? 'those photo boxes are' : 'that photo box is') + ' hidden.');
     localStorage.setItem('names', JSON.stringify(names));
