@@ -195,6 +195,12 @@
   .jobbar { display:flex; align-items:center; gap:8px; margin:0 0 10px; }
   .jobbar b { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:15px; }
   #btnJobs { background:transparent; color:var(--brand); border:0; padding:4px 6px 4px 0; font-size:15px; flex:0 0 auto; }
+  #btnMap { flex:0 0 auto; padding:6px 10px; font-size:13px; border-radius:99px; }
+  .mapRow { border-top:1px solid var(--line); padding:10px 0; }
+  .mapRow b { display:block; font-size:15px; word-break:break-word; }
+  .mapRow .hint { margin:2px 0 8px; }
+  .mapRow .row { display:flex; gap:8px; }
+  .mapRow .row button { flex:1; margin:0; }
   #btnOffline { flex:0 0 auto; padding:6px 10px; font-size:13px; border-radius:99px; }
   #btnOffline.on { background:#1a7f4b; border-color:#1a7f4b; color:#fff; }
   .offopt { display:block; width:100%; text-align:left; margin-top:8px; }
@@ -297,7 +303,7 @@
   </section>
   <section id="home">
     <div class="card">
-      <div class="jobbar"><b id="jobName"></b><button type="button" class="secondary" id="btnOffline">⬇ Offline</button></div>
+      <div class="jobbar"><b id="jobName"></b><button type="button" class="secondary" id="btnMap" hidden>🗺 Map</button><button type="button" class="secondary" id="btnOffline">⬇ Offline</button></div>
       <div hidden><select id="mView"><option value="">All dampers in this table</option></select></div>
       <div class="vrow">
         <select id="mTable" aria-label="View"></select>
@@ -361,6 +367,13 @@
   <button type="button" class="offopt secondary" id="offKeep">Keep until I remove it</button>
   <button type="button" class="offopt secondary" id="offRemove" style="color:#b42318;border-color:#b42318">Remove from this phone</button>
   <button type="button" class="offopt secondary" id="offCancel" style="border:0;text-align:center">Cancel</button>
+</dialog>
+
+<dialog id="mapDlg">
+  <h2 style="margin:0 0 4px">Job map</h2>
+  <p class="hint" style="margin:0 0 8px">From this job's Drawings table in Airtable. Maps are saved on this device by themselves, so they open with no signal.</p>
+  <div id="mapList"></div>
+  <button type="button" class="offopt secondary" id="mapClose" style="border:0;text-align:center">Close</button>
 </dialog>
 
 <dialog id="dlg">
@@ -431,6 +444,8 @@
     <p>Shows every job you can open. Search by job number or hospital, tap ☆ to pin a job to the top, and tap a job to open it.</p>
     <div class="hq"><b>⬇ Offline</b></div>
     <p>Saves one job on your phone so it works with no signal: <b>Today only</b> clears itself tomorrow, <b>Keep until I remove it</b> stays. Only the fields in the job's Tech View and small copies of its photos are saved. Jobs that are not saved still work whenever you have signal.</p>
+    <div class="hq"><b>🗺 Map</b></div>
+    <p>Shows the job's map from its Drawings table. It is saved on your device by itself, so it opens with no signal. Tap <b>Open</b> to look at it, or <b>Save to Files</b> to keep a copy (on iPhone, pick <b>Save to Files</b> in the share menu).</p>
     <div class="hq"><b>↻ Refresh lists</b></div>
     <p>Gets the newest dampers, info and photos. Tap it when you have Wi-Fi or signal, and before you go somewhere with no signal.</p>
     <div class="hq"><b>No signal? No problem.</b></div>
@@ -838,7 +853,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-02-d (test copy)';
+const APP_VERSION = '2026-11-02-e (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -882,6 +897,7 @@ async function refreshOptionsInner(manual) {
     }
     const tables = (await r.json()).tables;
     saveSchema(tables);
+    refreshMaps(tables, manual); // runs alongside; it only reads the Drawings table
     if (localStorage.getItem('autoView')) { // a job opened for the first time: start on its first Tech View
       localStorage.removeItem('autoView');
       const st = surveyTable(), tv = st && techViews(st)[0];
@@ -2589,8 +2605,102 @@ const pins = () => getJ('pins') || [];
 const fmtSize = (b) => (b < 1e6 ? Math.max(1, Math.round(b / 1e3)) + ' KB' : (b / 1e6).toFixed(b < 1e7 ? 1 : 0) + ' MB');
 const basesList = () => ((getJ('bases') || {}).list || []).filter((b) => !BASE_HIDE.test(b.name));
 function jobName(b) { const r = recentMap()[b], l = basesList().find((x) => x.id === b); return (l && l.name) || (r && r.name) || 'This job'; }
+/* ---------- Job map: the PDF(s) in the job's Drawings table (Grid view), saved on the device by themselves ---------- */
+const MAPC = 'beta-maps', MAPKEY = 'https://local.invalid/map/';
+const mapIdx = () => getJ('maps') || {};
+const setMapIdx = (m) => { try { localStorage.setItem('maps', JSON.stringify(m)); } catch {} };
+const mapUrls = {}; // attachment id -> Airtable link (links expire after a few hours, so they are not stored)
+let mapBusy = false;
+async function refreshMaps(tables, manual) {
+  const c = cfg(); if (!c.token || !navigator.onLine || mapBusy) return;
+  const idx = mapIdx(), cur = idx[c.base];
+  if (!manual && cur && Date.now() - (cur.at || 0) < 10 * 60e3 && cur.items.every((m) => mapUrls[m.id] || m.saved)) return; // checked a few minutes ago
+  const t = tables.find((x) => /^drawings?$/.test(norm(x.name))) || tables.find((x) => norm(x.name).includes('drawing'));
+  mapBusy = true;
+  try {
+    if (!t) { delete idx[c.base]; setMapIdx(idx); setJobBar(); return; }
+    const atts = t.fields.filter((f) => f.type === 'multipleAttachments');
+    const pf = t.fields.find((f) => f.id === t.primaryFieldId) || t.fields[0];
+    if (!atts.length) { delete idx[c.base]; setMapIdx(idx); setJobBar(); return; }
+    const v = (t.views || []).find((x) => norm(x.name) === 'gridview');
+    const q = [pf, ...atts].map((f) => 'fields%5B%5D=' + encodeURIComponent(f.name)).join('&');
+    const items = [];
+    let off = '';
+    for (let pg = 0; pg < 5; pg++) {
+      const r = await airtableGet(`https://api.airtable.com/v0/${c.base}/${t.id}?pageSize=100&${q}${v ? '&view=' + v.id : ''}${off ? '&offset=' + encodeURIComponent(off) : ''}`, { headers: { Authorization: 'Bearer ' + c.token } });
+      if (!r.ok) return;
+      const d = await r.json();
+      for (const rec of d.records) for (const f of atts) for (const a of rec.fields[f.name] || []) {
+        if (!/pdf|image/i.test(a.type || '') && !/\.pdf$/i.test(a.filename || '')) continue;
+        mapUrls[a.id] = a.url;
+        items.push({ id: a.id, fn: a.filename || 'map.pdf', size: a.size || 0, type: a.type || 'application/pdf', col: f.name, rec: String(rec.fields[pf.name] || '').trim() });
+      }
+      if (!d.offset) break; off = d.offset;
+    }
+    // PDFs are the maps; pictures only count when there is no PDF
+    const pdfs = items.filter((m) => /pdf/i.test(m.type) || /\.pdf$/i.test(m.fn));
+    const list = pdfs.length ? pdfs : items;
+    const cache = await caches.open(MAPC).catch(() => null);
+    for (const m of list) {
+      const key = MAPKEY + c.base + '/' + m.id;
+      m.saved = !!(cache && await cache.match(key));
+      if (!m.saved && cache && (!m.size || m.size < 80e6)) {
+        try { const fr = await fetch(mapUrls[m.id]); if (fr.ok) { await cache.put(key, new Response(await fr.blob(), { headers: { 'Content-Type': m.type } })); m.saved = true; } } catch {}
+      }
+    }
+    // keep maps for this job and jobs saved for offline; drop the rest to save space
+    if (cache) {
+      const keep = new Set([c.base, ...Object.keys(offMap())]), ids = new Set(list.map((m) => m.id));
+      for (const req of await cache.keys()) {
+        const [b, id] = req.url.slice(MAPKEY.length).split('/');
+        if (!keep.has(b) || (b === c.base && !ids.has(id))) await cache.delete(req);
+      }
+      for (const b of Object.keys(idx)) if (!keep.has(b)) delete idx[b];
+    }
+    if (list.length) idx[c.base] = { at: Date.now(), items: list }; else delete idx[c.base];
+    setMapIdx(idx); setJobBar();
+    if ($('mapDlg').open) drawMaps();
+  } catch { /* maps are extra: never block the lists */ } finally { mapBusy = false; }
+}
+async function mapBlob(m) {
+  const c = cfg(), key = MAPKEY + c.base + '/' + m.id;
+  const cache = await caches.open(MAPC).catch(() => null);
+  const hit = cache && await cache.match(key);
+  if (hit) return hit.blob();
+  if (!navigator.onLine || !mapUrls[m.id]) throw new Error('offline');
+  const r = await fetch(mapUrls[m.id]); if (!r.ok) throw new Error('fetch');
+  const b = await r.blob(); if (cache) cache.put(key, new Response(b, { headers: { 'Content-Type': m.type } })).catch(() => {});
+  return b;
+}
+function drawMaps() {
+  const box = $('mapList'), cur = mapIdx()[cfg().base]; box.textContent = '';
+  for (const m of (cur && cur.items) || []) {
+    const d = document.createElement('div'); d.className = 'mapRow';
+    const t = document.createElement('b'); t.textContent = m.fn;
+    const h = document.createElement('p'); h.className = 'hint'; h.textContent = [m.rec, m.col, m.size ? fmtSize(m.size) : '', m.saved ? '✓ saved on this device' : 'not saved yet: needs signal'].filter(Boolean).join(' · ');
+    const row = document.createElement('div'); row.className = 'row';
+    const op = document.createElement('button'); op.type = 'button'; op.textContent = 'Open';
+    const sv = document.createElement('button'); sv.type = 'button'; sv.className = 'secondary'; sv.textContent = 'Save to Files';
+    op.onclick = async () => {
+      const w = window.open('', '_blank'); // open the tab right away so the phone does not block it
+      try { const b = await mapBlob(m); const u = URL.createObjectURL(new Blob([b], { type: m.type })); if (w) w.location.href = u; else location.assign(u); }
+      catch { if (w) w.close(); toast('This map is not saved on this device yet. Open it once with signal.'); }
+    };
+    sv.onclick = async () => {
+      try {
+        const b = await mapBlob(m), file = new File([b], m.fn, { type: m.type });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: m.fn }); } catch {} return; } // iPhone/iPad: pick "Save to Files"
+        const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = m.fn; document.body.append(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 60e3);
+      } catch { toast('This map is not saved on this device yet. Try again with signal.'); }
+    };
+    row.append(op, sv); d.append(t, h, row); box.append(d);
+  }
+  if (!box.childElementCount) box.textContent = 'No map found in this job\'s Drawings table.';
+}
 function setJobBar() {
   const c = cfg(), o = offMap()[c.base], btn = $('btnOffline');
+  { const cur = mapIdx()[c.base]; $('btnMap').hidden = !(cur && cur.items && cur.items.length); }
   $('jobName').textContent = jobName(c.base);
   btn.textContent = !o ? '⬇ Offline' : o.mode === 'today' ? '✓ Today' : '✓ Kept';
   btn.classList.toggle('on', !!o);
@@ -2746,6 +2856,8 @@ $('offKeep').onclick = () => markOffline('keep');
 $('offRemove').onclick = async () => { const t = offTarget; $('offDlg').close(); if (t) { await removeOffline(t.base); toast('Removed from this phone'); } };
 $('offCancel').onclick = () => $('offDlg').close();
 $('btnOffline').onclick = () => openOff(cfg().base);
+$('btnMap').onclick = () => { drawMaps(); $('mapDlg').showModal(); };
+$('mapClose').onclick = () => $('mapDlg').close();
 $('btnToJobs').onclick = () => showJobs(true);
 $('btnBases').onclick = () => loadBases(true);
 $('pSearch').oninput = () => renderJobs();
