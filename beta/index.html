@@ -263,7 +263,9 @@
   .pillbox { position:relative; min-height:44px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:8px 30px 8px 12px; background:var(--bg); border-radius:6px; cursor:pointer; }
   .pillbox::after { content:'▾'; position:absolute; right:12px; top:50%; transform:translateY(-50%); color:var(--muted); }
   .pillbox .ph { color:var(--muted); }
-  .pillbox .chip { font-size:14px; padding:3px 11px; }
+  .pillbox .chip { font-size:14px; padding:3px 11px; white-space:normal; text-align:left; border-radius:14px; line-height:1.35; display:inline-flex; align-items:center; gap:4px; }
+  .pillbox .chip .cx { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; margin:-2px -6px -2px 2px; border-radius:50%; background:rgba(0,0,0,.14); color:inherit; font-size:14px; font-weight:700; line-height:1; cursor:pointer; }
+  .pkpill .chip { border-radius:14px; line-height:1.35; }
   .chip .av { display:inline-block; width:18px; height:18px; border-radius:50%; color:#fff; font-size:10px; font-weight:700; text-align:center; line-height:18px; margin:0 5px 0 -7px; vertical-align:-3px; }
   .pkitem.pk2 { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:11px 6px; }
   .pkitem.pk2 .chip { font-size:14px; padding:3px 11px; white-space:normal; }
@@ -344,9 +346,6 @@
         <div id="photoBlocks"></div>
         <div id="fields2" style="margin-top:12px"></div>
         <p id="formMsg" hidden style="margin:16px 0 0;font-weight:700;color:#d92d20"></p>
-        <div class="row" style="margin-top:20px">
-          <button type="submit">Save entry</button>
-        </div>
       </form>
     </div>
     <div id="navBar"><button type="button" id="navPrev" aria-label="Previous damper">‹</button><span id="navPos"></span><button type="button" id="navNext" aria-label="Next damper">›</button></div>
@@ -421,7 +420,7 @@
     <div class="hq"><span class="rdot"></span><b>Red dot</b></div>
     <p>Someone started this damper, but some info is still missing or doesn't match. Tap the damper. The top of the page tells you what to fix.</p>
     <div class="hq"><b>Tap a damper</b></div>
-    <p>Opens its page. Fill in what you need, add photos, then tap <b>Save entry</b>. Tap the <b>×</b> to close the page.</p>
+    <p>Opens its page. Fill in what you need and add photos. Everything is saved when you tap the <b>×</b> or go to the next damper, and sent by itself when there is signal.</p>
     <div class="hq"><b>Copy and paste in the table</b></div>
     <p>Hold a cell (for example Inspection Note) until the black bar shows at the bottom. Then tap other cells in the same column to paste it into them. Tap <b>Done</b> when finished.</p>
     <div class="hq"><b>Move a photo to another box</b></div>
@@ -435,7 +434,7 @@
     <div class="hq"><b>No signal? No problem.</b></div>
     <p>Keep working. Your entries are saved on your phone and sent by themselves when the signal comes back. <b>waiting to sync</b> means it hasn't been sent yet.</p>
     <div class="hq"><b>Unfinished work is kept</b></div>
-    <p>Anything you type or photograph is kept even if you close the page without saving. The damper shows <b>draft</b>, but it is not sent until you tap <b>Save entry</b>.</p>
+    <p>If the app closes while you are on a damper page, what you typed and photographed is kept. The damper shows <b>draft</b> and it is sent the next time you open it and close it again.</p>
     <div class="hq"><b>Photos</b></div>
     <p>Photos already taken show in each box. Tap <b>Take photo</b> to use the camera, <b>Camera roll</b> to pick from your photos, or <b>Choose file</b> for anything else. Photos from the camera are also kept in your phone's Photos app.</p>
     <div class="hq"><b>Menus (Pass, Fail...)</b></div>
@@ -595,6 +594,11 @@ function openPicker(f, target) {
   }
   const multi = !!f.multi;
   let sel = []; try { sel = JSON.parse(target.dataset.sel || '[]'); } catch {}
+  if (!sel.length && multi && target.value) sel = target.value.split(', ');
+  { // what is already picked shows first when the list opens (it does not jump around while picking)
+    const on = multi ? sel : [target.value];
+    if (!f.existing && on.length) all = [...on.filter((x) => all.includes(x)), ...all.filter((x) => !on.includes(x))];
+  }
   $('pkClose').textContent = multi ? 'Done' : 'Cancel';
   // choice lists open as a sheet from the bottom with the choices side by side; the damper list stays a long list
   const sheet = !f.existing;
@@ -829,7 +833,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-02-a (test copy)';
+const APP_VERSION = '2026-11-02-b (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1219,7 +1223,15 @@ function refreshChips() {
     pb.textContent = '';
     const vals = pickedOf(el, f);
     if (!vals.length) { const ph = document.createElement('span'); ph.className = 'ph'; ph.textContent = f.multi ? 'Tap to choose (you can pick more than one)' : 'Tap to choose'; pb.append(ph); }
-    for (const v of vals) pb.append(pillEl(v, f));
+    for (const v of vals) { // each oval has an × to take it off without opening the list
+      const c = pillEl(v, f), x = document.createElement('span'); x.className = 'cx'; x.textContent = '×'; x.setAttribute('role', 'button'); x.setAttribute('aria-label', 'Remove ' + v);
+      x.onclick = (e) => {
+        e.stopPropagation();
+        if (f.multi) { const left = pickedOf(el, f).filter((y) => y !== v); el.dataset.sel = JSON.stringify(left); el.value = left.join(', '); } else el.value = '';
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      c.append(x); pb.append(c);
+    }
   }
 }
 document.addEventListener('change', (e) => { if (e.target.closest && e.target.closest('#detail')) refreshChips(); });
@@ -1853,10 +1865,10 @@ function updateNav() {
   $('navPos').textContent = (i + 1) + ' / ' + navList.length;
   $('navPrev').disabled = i <= 0; $('navNext').disabled = i >= navList.length - 1;
 }
-function navGo(d) { const i = navList.indexOf(curLabel) + d; if (i >= 0 && i < navList.length) openDamper(navList[i]); }
+async function navGo(d) { const i = navList.indexOf(curLabel) + d; if (i >= 0 && i < navList.length) { await commitIfChanged(); openDamper(navList[i]); } }
 function goBack() { if (history.state && history.state.d) history.back(); else goHome(); }
 addEventListener('popstate', () => { if ($('detail').open) $('detail').close(); });
-$('detail').addEventListener('close', () => { saveDraft(); newMode = false; applyMode(); if (history.state && history.state.d) history.back(); });
+$('detail').addEventListener('close', () => { commitIfChanged(); newMode = false; applyMode(); if (history.state && history.state.d) history.back(); });
 $('btnBack').onclick = goBack;
 $('btnNew').onclick = () => openNew();
 
@@ -2106,8 +2118,11 @@ async function shrink(file) {
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('encode'))), 'image/jpeg', JPEG_Q));
 }
 
-$('form').addEventListener('submit', async (e) => {
-  e.preventDefault();
+// Changes on a damper page are sent when you close the page or go to the next damper (no Save button).
+// quiet: no messages unless something stops it; the unfinished work stays as a draft.
+const isDirty = () => !!draftKey && (formState() !== baseline || PHOTOS.some((n) => (pendingPhotos[n] || []).length));
+async function commitForm(quiet) {
+  const say = (m) => { if (!quiet) toast(m); };
   const fields = {}, vals = {}, k = {};
   let pickedId = '';
   for (const f of FIELDS) {
@@ -2145,14 +2160,14 @@ $('form').addEventListener('submit', async (e) => {
   const ef = FIELDS.find((f) => f.existing);
   if (newMode) {
     const num = vals['Damper ID #'] || '';
-    if (!num) { toast('Enter the damper number'); return; }
-    if (/[-\s]/.test(num)) { toast('Enter just the number (for example 011), not the whole ID. Pick the type and floor above.'); return; }
+    if (!num) { toast(quiet ? 'New damper kept as a draft. Enter the damper number to send it.' : 'Enter the damper number'); return false; }
+    if (/[-\s]/.test(num)) { toast((quiet ? 'New damper kept as a draft. ' : '') + 'Enter just the number (for example 011), not the whole ID. Pick the type and floor above.'); return false; }
     label = [vals['Damper type'], vals['Floor'], num].filter(Boolean).join('-');
   } else {
     const o = getOpts()[ef.key];
-    if (!o || !o.recs || !Object.keys(o.recs).length) { toast('Damper list not loaded yet. Tap Refresh lists at the top, or add a new damper.'); return; }
+    if (!o || !o.recs || !Object.keys(o.recs).length) { toast('Damper list not loaded yet, so this was kept as a draft. Tap Refresh lists at the top.'); return false; }
     presetId = o.recs[pickedId];
-    if (!presetId) { toast('Pick a Damper ID from the list'); return; }
+    if (!presetId) { toast('Pick a Damper ID from the list'); return false; }
     label = pickedId;
   }
   { // keep the first inspector and date of the day; fill in any that were not set yet
@@ -2167,22 +2182,22 @@ $('form').addEventListener('submit', async (e) => {
     (pendingPhotos[name] || []).forEach((p, i) =>
       photos.push({ field: colOf(name), name: `${name.replace(/\W+/g, '_')}_${i + 1}.jpg`, blob: p.blob, done: false }));
   }
-  if (!photos.length && !Object.keys(fields).length) { toast('Add a photo or some notes first'); return; }
+  if (!photos.length && !Object.keys(fields).length) { say('Add a photo or some notes first'); return false; }
   const item = {
     id: crypto.randomUUID(), createdAt: Date.now(), label, fields, photos,
     recordId: presetId, preset: !!presetId, status: 'pending', error: '', base: cfg().base, tbl: tableRef(cfg()),
   };
+  const dk = draftKey;
   try { await putItem(item); }
-  catch { toast('Could not save: phone storage may be full. Sync or free up space.'); return; }
-  { const dk = draftKey; draftKey = ''; clearTimeout(draftTimer); if (dk) await deleteDraft(dk); }
-  for (const name of PHOTOS) { (pendingPhotos[name] || []).forEach((p) => URL.revokeObjectURL(p.url)); }
-  pendingPhotos = {}; PHOTOS.forEach(renderThumbs);
-  hideInfo(); lastFilled = {}; $('form').reset(); FIELDS.forEach((f) => { if (f.multi) $(fid(f.key)).dataset.sel = ''; }); applyKeeps();
-  goBack();
-  setTimeout(() => toast('Saved ✓ It will send by itself when there is signal.'), 400);
-  await render();
-  sync();
-});
+  catch { toast('Could not save: phone storage may be full. It is kept as a draft. Sync or free up space.'); await saveDraft(); return false; }
+  clearTimeout(draftTimer);
+  if (dk) await deleteDraft(dk);
+  if (draftKey === dk) { draftKey = ''; resetForm(); } // nothing else was opened meanwhile
+  render().then(renderHome); sync();
+  return true;
+}
+async function commitIfChanged() { if (!isDirty() || !(await commitForm(true))) await saveDraft(); }
+$('form').addEventListener('submit', (e) => e.preventDefault());
 
 /* ---------- Sync ---------- */
 let syncing = false;
