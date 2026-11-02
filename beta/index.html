@@ -140,6 +140,8 @@
   #hCount { position:absolute; right:12px; top:50%; transform:translateY(-50%); font-size:13px; color:var(--muted); pointer-events:none; white-space:nowrap; }
   #btnNew { position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom)); z-index:6; border-radius:99px; padding:13px 20px; font-weight:700; font-size:15px; box-shadow:0 4px 14px rgba(0,0,0,.28); }
   main { padding-bottom:80px; }
+  .gfull { white-space:normal !important; flex-wrap:wrap; align-content:center; padding-top:6px !important; padding-bottom:6px !important; }
+  .gfull .chip { white-space:normal; text-align:left; border-radius:12px; line-height:1.3; max-width:100%; overflow:visible; }
   .gnote { white-space:normal !important; align-items:flex-start !important; flex-direction:column; justify-content:center; }
   .gnote .nt { white-space:pre-wrap; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.35; width:100%; }
   .gnote.open .nt { display:block; -webkit-line-clamp:unset; }
@@ -584,6 +586,7 @@ const delItem = (id) => tx('readwrite', (s) => s.delete(id));
 const allItems = () => tx('readonly', (s) => s.getAll()).then((r) => (r || []).sort((a, b) => b.createdAt - a.createdAt));
 
 /* ---------- Searchable picker for long lists ---------- */
+const FULL_COLS = ['Inspection Note - Select', 'Suggested Follow-up'].map((k) => k.toLowerCase().replace(/[^a-z0-9]/g, ''));
 const TYPE_FIRST = ['Inspection Note - Select', 'Suggested Follow-up'];
 function openPicker(f, target) {
   const o = getOpts()[f.key];
@@ -833,7 +836,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-02-b (test copy)';
+const APP_VERSION = '2026-11-02-c (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1753,7 +1756,7 @@ function renderGrid(list, groups, ctx) {
     ['chip', 'Barrier Rating', 150], ['chip', 'Damper Mechanism', 170],
     ...PHOTOS.filter((n) => n !== LOC_PIC).map((n) => ['pic', n, 84]),
     ['chip', 'Operational Test', 130], ['text', 'Duct Width', 90], ['text', 'Duct Height', 90], ['note', 'Inspection Field Notes', 260],
-    ['multi', 'Inspection Note - Select', 230], ['multi', 'Suggested Follow-up', 190], ['multi', 'Special Conditions - Inspections', 190],
+    ['multi', 'Inspection Note - Select', 300], ['multi', 'Suggested Follow-up', 280], ['multi', 'Special Conditions - Inspections', 190],
     ['multi', 'Inspector(s)', 160], ['text', 'Inspection Date', 120],
   ].filter((c, i) => i === 0 || !hiddenCols().map(norm).includes(norm(c[1]))); // columns the Tech View hides are left out
   const linkCols = ((dd && dd.links) || ['Building', 'Floor', 'Damper Type']).map(norm);
@@ -1818,7 +1821,9 @@ function renderGrid(list, groups, ctx) {
         if (!Array.isArray(arr)) arr = [arr];
         d.style.gap = '4px'; d.title = arr.map((x) => rev[x] || x).join(', ');
         const ff = FIELDS.find((x) => norm(x.key) === norm(name));
-        arr.forEach((x) => { const c = pillEl(rev[x] || x, ff); c.style.maxWidth = '170px'; d.append(c); });
+        const full = FULL_COLS.includes(norm(name)); // notes and follow-ups show their whole text; the row grows to fit
+        if (full) d.classList.add('gfull');
+        arr.forEach((x) => { const c = pillEl(rev[x] || x, ff); if (!full) c.style.maxWidth = '170px'; d.append(c); });
       } else if (kind === 'note') { // the whole note when it fits in the row; longer ones get "more" to open them right here
         const v = val(rid, name); d.classList.add('gnote'); if (!v) { r.append(d); return; }
         const t = document.createElement('div'); t.className = 'nt'; t.textContent = v; d.append(t);
