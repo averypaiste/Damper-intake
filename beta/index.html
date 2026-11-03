@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1f4e79">
+<meta name="theme-color" content="#0e7c74">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Damper Inspection (test)</title>
 <style>
-  :root { --bg:#f5f6f8; --card:#fff; --ink:#1b1f24; --muted:#667085; --brand:#1f4e79; --ok:#1a7f4b; --warn:#b54708; --err:#b42318; --line:#d9dde3; }
+  :root { --bg:#f5f6f8; --card:#fff; --ink:#1b1f24; --muted:#667085; --brand:#0e7c74; --ok:#1a7f4b; --warn:#b54708; --err:#b42318; --line:#d9dde3; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#12151a; --card:#1b2028; --ink:#e8ecf1; --muted:#98a2b3; --brand:#5b9bd5; --line:#2e3642; }
+    :root { --bg:#12151a; --card:#1b2028; --ink:#e8ecf1; --muted:#98a2b3; --brand:#3fb8ad; --line:#2e3642; }
   }
   * { box-sizing: border-box; }
   body { margin:0; font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); padding-bottom:env(safe-area-inset-bottom); }
@@ -19,7 +19,7 @@
   header h1 .short { display:none; }
   @media (max-width:520px) { header h1 .long { display:none; } header h1 .short { display:inline; } }
   header button { white-space:nowrap; padding:6px 10px; }
-  header { gap:6px; padding:10px 12px; background:#1a7f4b; transition:background .2s; }
+  header { gap:6px; padding:10px 12px; background:#0e7c74; transition:background .2s; }
   header.off { background:#b42318; }
   header button { font-size:13px; padding:6px 8px; }
   #ttl { flex:1 1 auto; min-width:0; }
@@ -279,6 +279,49 @@
   .pkitem.pk2 { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:11px 6px; }
   .pkitem.pk2 .chip { font-size:14px; padding:3px 11px; white-space:normal; }
   .pkitem .ck { color:#2d7ff9; font-weight:800; font-size:18px; }
+  /* floor checklist */
+  .fsum { display:flex; justify-content:space-between; align-items:flex-end; margin:4px 0 8px; }
+  .fwh { font-size:13px; color:var(--muted); font-weight:600; }
+  .ffl { font-size:22px; font-weight:800; }
+  .fnum { text-align:right; } .fnum b { display:block; font-size:22px; color:#0e7c74; } .fnum span { font-size:12px; color:var(--muted); }
+  .fbar { height:8px; border-radius:4px; background:var(--line); display:flex; overflow:hidden; }
+  .ftabs { display:flex; gap:6px; overflow-x:auto; margin:10px 0 8px; padding-bottom:2px; }
+  .ftab { flex:0 0 auto; background:var(--bg); color:var(--muted); border:1px solid var(--line); border-radius:99px; padding:6px 12px; font-size:14px; }
+  .ftab.on { background:#0e7c74; border-color:#0e7c74; color:#fff; }
+  .flist { margin:0 -16px 60px; border-top:1px solid var(--line); }
+  .frow { display:flex; align-items:center; gap:10px; padding:10px 16px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .frow:active { background:var(--bg); }
+  .fdot { width:12px; height:12px; border-radius:50%; flex:none; }
+  .fm { flex:1; min-width:0; }
+  .fid { font-weight:800; font-size:16px; display:flex; align-items:center; gap:6px; }
+  .fl { font-size:13px; color:var(--muted); overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .fq { display:flex; gap:6px; flex:none; }
+  .fqb { width:44px; height:44px; padding:0; border-radius:12px; font-size:19px; font-weight:800; }
+  .fqb.p { background:#d9f5e1; color:#126b32; } .fqb.f { background:#fde0de; color:#a3201a; } .fqb.o { background:var(--bg); color:var(--muted); border:1px solid var(--line); }
+  .psph { display:flex; gap:10px; }
+  .psbox { flex:1; height:110px; margin:0; border:2px dashed var(--line); border-radius:12px; display:flex; align-items:flex-end; justify-content:center; padding:8px; font-weight:700; background-size:cover; background-position:center; cursor:pointer; }
+  .psbox span { background:var(--card); border-radius:8px; padding:3px 8px; }
+  .psbox.has { border-style:solid; border-color:#1f9d55; }
+  #fmode { margin-left:auto; }
+  @media (min-width:900px) { main { max-width:900px; } }
+  /* bottom bar: the buttons that used to sit at the top */
+  #btnMap, #btnOffline, #fmode { display:none !important; }
+  body { padding-bottom:calc(84px + env(safe-area-inset-bottom)); }
+  #btnNew { bottom:calc(84px + env(safe-area-inset-bottom)); }
+  #tabbar { position:fixed; left:0; right:0; bottom:0; z-index:6; display:flex; justify-content:center; background:var(--card); border-top:1px solid var(--line); padding:6px 4px calc(6px + env(safe-area-inset-bottom)); }
+  #tabbar[hidden] { display:none; }
+  #tabbar button { flex:1; max-width:150px; background:none; color:var(--muted); border:0; border-radius:10px; padding:4px 0; font-size:11.5px; font-weight:700; display:flex; flex-direction:column; align-items:center; gap:1px; position:relative; }
+  #tabbar button b { font-size:21px; line-height:1.15; font-weight:400; }
+  #tabbar button.on { color:#0e7c74; }
+  #tabbar button.on b { background:#d7efec; border-radius:12px; padding:0 14px; }
+  #tabbar button.off { opacity:.35; }
+  #tabbar #tabOff.kept { color:#1a7f4b; }
+  #tabbar #tabOff.saving { color:#b54708; }
+  #tabbar #tabOff.saving b { animation:pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity:.35; } }
+  #tabbar i { position:absolute; top:0; left:calc(50% + 6px); min-width:18px; height:18px; border-radius:9px; background:#f79009; color:#fff; font-style:normal; font-size:11px; line-height:18px; padding:0 5px; }
+  #tabbar button.busy b { animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -291,6 +334,13 @@
 </header>
 
 <button type="button" id="btnNew">+ New damper</button>
+<nav id="tabbar">
+  <button type="button" id="tabList"><b>🧰</b>Tech view</button>
+  <button type="button" id="tabTable"><b>📋</b>Manager view</button>
+  <button type="button" id="tabMap"><b>🗺</b>Map</button>
+  <button type="button" id="tabOff"><b>⬇</b><span>Offline</span></button>
+  <button type="button" id="tabSync"><b>☁</b><span>Synced</span><i id="tabSyncN" hidden></i></button>
+</nav>
 <div id="moveBar" hidden><div id="mvText"></div><div id="mvHint" class="hint"></div><label id="mvKeepL"><input type="checkbox" id="mvKeep"> Keep a copy in the old box too</label><button type="button" id="mvCancel">Cancel</button></div>
 <div id="pasteBar" hidden><div id="pbVal"></div><div id="pbHint" class="hint"></div><button type="button" id="pbDone">Done</button></div>
 <main>
@@ -309,6 +359,7 @@
       <div class="vrow">
         <select id="mTable" aria-label="View"></select>
         <button type="button" class="secondary" id="btnLists" aria-label="Refresh lists" title="Refresh lists">↻</button>
+        <button type="button" class="secondary" id="fmode" title="Switch between the floor checklist and the full table" style="flex:0 0 auto;padding:6px 10px;font-size:14px"></button>
       </div>
       <p class="hint" id="dl" hidden style="margin:-4px 0 10px"></p>
       <p id="hMsg" hidden style="margin:-4px 0 10px;font-weight:600"></p>
@@ -411,6 +462,15 @@
   </form>
 </dialog>
 
+<dialog id="passDlg">
+  <h2 id="psTitle" style="margin:0 0 6px"></h2>
+  <div id="psBody"></div>
+  <button type="button" id="psSave" style="width:100%;margin-top:16px;background:#1f9d55;font-size:18px;padding:14px">Save Pass</button>
+  <div class="row" style="margin-top:10px">
+    <button type="button" class="secondary" id="psCancel">Cancel</button>
+    <button type="button" class="secondary" id="psMore">Open full page</button>
+  </div>
+</dialog>
 <dialog id="quick">
   <h2 id="qTitle" style="margin:0 0 10px"></h2>
   <div id="qBody"></div>
@@ -854,7 +914,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-02-f (test copy)';
+const APP_VERSION = '2026-11-03-a (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1894,6 +1954,126 @@ function renderGrid(list, groups, ctx) {
   const setW = () => wrap.style.setProperty('--vw', wrap.clientWidth + 'px');
   setW(); requestAnimationFrame(setW);
 }
+// ---- Floor checklist: one row per damper with ✓ (pass) ✕ (fail) ⋯ (open) buttons ----
+let ftabsX = 0;
+let fStat = (() => { try { return localStorage.getItem('fstat') || 'todo'; } catch { return 'todo'; } })();
+const STAT = (v) => { v = String(v || ''); return !v ? 'todo' : /^pass/i.test(v) ? 'pass' : /fail/i.test(v) ? 'fail' : /no access/i.test(v) ? 'na' : 'other'; };
+const STATCOL = { pass: '#1f9d55', fail: '#d64035', na: '#f2b705', other: '#5b8def', todo: '#c9ced4' };
+function renderFloor(list, hits, ctx) {
+  const { dd, fillAll, flagged, recs, opOf, waiting, drafts, bv, fv } = ctx;
+  const colIx = {}; for (const k of (dd && dd.order) || []) colIx[norm(k)] = k;
+  const val = (rid, name) => { const rec = ((dd && dd.recs) || {})[rid] || {}, k = colIx[norm(name)]; let v = k ? rec[k] : ''; if (!v) { const f = (fillAll[rid] || {})[name]; v = Array.isArray(f) ? f.join(', ') : f || ''; } return String(v || ''); };
+  const cnt = { all: hits.length, todo: 0, pass: 0, fail: 0, na: 0, other: 0 };
+  hits.forEach((n) => cnt[STAT(opOf(n))]++);
+  if (fStat !== 'all' && !cnt[fStat] && fStat !== 'todo') fStat = 'all';
+  // summary: which floor, how many done, colored progress bar
+  const top = document.createElement('div'); top.className = 'fsum';
+  const where = document.createElement('div');
+  const s1 = document.createElement('div'); s1.className = 'fwh'; s1.textContent = bv ? 'Bldg ' + bv : 'All buildings';
+  const s2 = document.createElement('div'); s2.className = 'ffl'; s2.textContent = fv ? 'Floor ' + fv : bv ? 'All floors' : 'Pick a building and floor';
+  where.append(s1, s2);
+  const done = hits.length - cnt.todo;
+  const nb = document.createElement('div'); nb.className = 'fnum'; nb.innerHTML = '<b></b><span>done</span>'; nb.firstChild.textContent = done + '/' + hits.length;
+  top.append(where, nb);
+  const bar = document.createElement('div'); bar.className = 'fbar';
+  for (const k of ['pass', 'other', 'na', 'fail']) if (cnt[k]) { const i = document.createElement('i'); i.style.width = (100 * cnt[k] / Math.max(1, hits.length)) + '%'; i.style.background = STATCOL[k]; bar.append(i); }
+  const tabs = document.createElement('div'); tabs.className = 'ftabs';
+  tabs.addEventListener('scroll', () => { ftabsX = tabs.scrollLeft; }, { passive: true });
+  for (const [k, t] of [['todo', 'To do'], ['all', 'All'], ['fail', 'Fail'], ['na', 'No access'], ['pass', 'Pass'], ['other', 'Other']]) {
+    if (k !== 'todo' && k !== 'all' && !cnt[k]) continue;
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'ftab' + (fStat === k ? ' on' : ''); b.textContent = t + ' ' + cnt[k];
+    b.onclick = () => { fStat = k; try { localStorage.setItem('fstat', k); } catch {} renderHome(); };
+    tabs.append(b);
+  }
+  list.append(top, bar, tabs);
+  tabs.scrollLeft = ftabsX; // stay where it was scrolled to when the list refreshes itself
+  const shown = hits.filter((n) => fStat === 'all' || STAT(opOf(n)) === fStat);
+  navList = shown;
+  if (!shown.length) { const e = document.createElement('p'); e.className = 'hint'; e.style.cssText = 'text-align:center;margin:22px 0'; e.textContent = !hits.length ? 'No dampers here yet. Tap ↻ to load, or change the filters.' : fStat === 'todo' ? '🎉 Every damper here has a result.' : 'None.'; list.append(e); return; }
+  const box = document.createElement('div'); box.className = 'flist';
+  for (const n of shown) {
+    const rid = recs[n], op = opOf(n), st = STAT(op);
+    const r = document.createElement('div'); r.className = 'frow';
+    const dot = document.createElement('span'); dot.className = 'fdot'; dot.style.background = STATCOL[st];
+    const m = document.createElement('div'); m.className = 'fm';
+    const id = document.createElement('div'); id.className = 'fid'; id.textContent = n.replace(/^.*· /, '');
+    if (flagged(n)) { const w = document.createElement('span'); w.className = 'rdot'; w.title = 'Missing info'; id.prepend(w); }
+    const w = val(rid, 'Duct Width'), h = val(rid, 'Duct Height');
+    const sub = [val(rid, 'Room/Location'), val(rid, 'Damper Type'), w && h ? w + '×' + h : '', val(rid, 'Damper Mechanism')].filter(Boolean).join(' · ');
+    const l = document.createElement('div'); l.className = 'fl'; l.textContent = sub || ' ';
+    m.append(id, l);
+    if (waiting.has(rid)) { const p = document.createElement('div'); p.className = 'pend'; p.textContent = '● waiting to sync'; m.append(p); }
+    else if (drafts[rid]) { const p = document.createElement('div'); p.className = 'pend'; p.style.color = 'var(--brand)'; p.textContent = '● draft'; m.append(p); }
+    r.append(dot, m);
+    if (op) { r.append(chipEl(op)); }
+    else {
+      const q = document.createElement('div'); q.className = 'fq';
+      const mk = (t, c, fn, lab) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'fqb ' + c; b.textContent = t; b.setAttribute('aria-label', lab); b.onclick = (e) => { e.stopPropagation(); fn(); }; return b; };
+      q.append(mk('✓', 'p', () => openPass(n, rid), 'Pass'), mk('✕', 'f', () => openDamper(n, false, 'Operational Test'), 'Fail or other result'), mk('⋯', 'o', () => openDamper(n), 'Open damper'));
+      r.append(q);
+    }
+    r.onclick = () => openDamper(n);
+    box.append(r);
+  }
+  list.append(box);
+}
+// ✓ on a row: a small window to save Pass, with optional Open / Closed photos
+function openPass(n, rid) {
+  const dlg = $('passDlg'), body = $('psBody'); body.textContent = '';
+  $('psTitle').textContent = '✓ Pass · ' + n.replace(/^.*· /, '');
+  const opts = getOpts(), hid = hiddenCols().map(norm);
+  const insF = 'Inspector(s)', io = opts[insF] || {}, kv = keepVals();
+  let ins = kv[insF]; ins = Array.isArray(ins) ? ins : ins ? [ins] : [];
+  let insSel = null;
+  if (!hid.includes(norm(insF)) && (io.choices || []).length) {
+    const lb = document.createElement('label'); lb.textContent = 'Inspector';
+    insSel = document.createElement('select'); insSel.append(new Option('Pick inspector…', ''));
+    io.choices.forEach((c) => insSel.append(new Option(c, c))); insSel.value = ins[0] && io.choices.includes(ins[0]) ? ins[0] : '';
+    body.append(lb, insSel);
+    if (ins.length > 1) { const hn = document.createElement('p'); hn.className = 'hint'; hn.textContent = 'Today: ' + ins.join(', '); body.append(hn); insSel.dataset.many = '1'; }
+  }
+  const shots = {};
+  const want = ['Open Damper', 'Closed Damper'].filter((p) => !noPics().includes(p) && !hid.includes(norm(colOf(p))));
+  if (want.length) {
+    const lb = document.createElement('label'); lb.textContent = 'Photos (optional)'; body.append(lb);
+    const row = document.createElement('div'); row.className = 'psph';
+    for (const p of want) {
+      const l = document.createElement('label'); l.className = 'psbox';
+      const t = document.createElement('span'); t.textContent = '📷 ' + p.replace(' Damper', '');
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.setAttribute('capture', 'environment'); inp.style.display = 'none';
+      inp.onchange = async () => { const f = inp.files[0]; if (!f) return; try { const blob = await shrink(f); if (shots[p]) URL.revokeObjectURL(shots[p].url); shots[p] = { blob, url: URL.createObjectURL(blob) }; l.style.backgroundImage = `url(${shots[p].url})`; l.classList.add('has'); t.textContent = p.replace(' Damper', '') + ' ✓'; } catch { toast('Could not read the photo'); } inp.value = ''; };
+      l.append(t, inp); row.append(l);
+    }
+    body.append(row);
+  }
+  const close = () => { Object.values(shots).forEach((s) => URL.revokeObjectURL(s.url)); dlg.close(); };
+  $('psCancel').onclick = close;
+  $('psMore').onclick = () => { close(); openDamper(n); };
+  $('psSave').onclick = async () => {
+    const opF = 'Operational Test', oo = opts[opF] || {};
+    const pass = (oo.choices || []).find((c) => /^pass$/i.test(c)) || 'Pass';
+    const fields = { [colOf(opF)]: oo.type === 'multipleSelects' ? [pass] : pass };
+    const day = kv['Inspection Date'] || today();
+    if (!hid.includes(norm('Inspection Date'))) fields[colOf('Inspection Date')] = day;
+    let people = ins;
+    if (insSel && !insSel.dataset.many) people = insSel.value ? [insSel.value] : [];
+    if (insSel && insSel.dataset.many && insSel.value && !ins.includes(insSel.value)) people = [insSel.value];
+    if (insSel && people.length) {
+      const who = (nm) => { const pp = (io.people && io.people[nm]) || {}; return pp.id ? { id: pp.id } : { email: pp.email || nm }; };
+      fields[colOf(insF)] = io.type === 'multipleCollaborators' ? people.map(who) : /Collaborator/.test(io.type || '') ? who(people[0]) : io.type === 'multipleSelects' ? people : people[0];
+      const k = keeps(); if (k.__day !== today()) { for (const f of FIELDS) if (f.keep && f.type === 'date') delete k[f.key]; }
+      k[insF] = people; k['Inspection Date'] = k['Inspection Date'] || day; k.__day = today(); localStorage.setItem('keeps', JSON.stringify(k));
+    }
+    const photos = Object.entries(shots).map(([p, s]) => ({ field: colOf(p), name: `${p.replace(/\W+/g, '_')}_1.jpg`, blob: s.blob, done: false }));
+    const item = { id: crypto.randomUUID(), createdAt: Date.now(), label: n, fields, photos, recordId: rid, preset: true, status: 'pending', error: '', base: cfg().base, tbl: tableRef(cfg()) };
+    try { await putItem(item); } catch { toast('Could not save: phone storage may be full. Sync or free up space.'); return; }
+    const d = await loadDetail();
+    if (d) { const fr = ((d.fill ||= {})[rid] ||= {}); fr[opF] = pass; fr['Inspection Date'] = day; if (people.length) fr[insF] = people; await saveDetail(d); }
+    close(); toast('Pass saved ✓');
+    await render(); sync();
+  };
+  dlg.showModal();
+}
 function updateNav() {
   const i = navList.indexOf(curLabel), has = !newMode && i >= 0;
   $('navBar').style.display = has ? 'flex' : 'none';
@@ -1910,6 +2090,7 @@ $('btnNew').onclick = () => openNew();
 
 // The list of dampers on the first screen (building and floor dropdowns, search, and a marker for entries still waiting)
 let homeSeq = 0, onlyMiss = false;
+let floorMode = (() => { try { return localStorage.getItem('fmode') !== 'grid'; } catch { return true; } })();
 const openSet = new Set(); // menus opened by the person; they stay open (also after visiting a damper) until the person closes them
 let dateSort = (() => { try { return localStorage.getItem('dsort') || ''; } catch { return ''; } })();
 // Date sort, in the filter boxes above search: any order (grouped by status) / newest first / oldest first
@@ -2016,6 +2197,7 @@ async function renderHome() {
     if (order0) { const dt = dateOf(n); const m = document.createElement('span'); m.className = 'pend'; m.style.color = 'var(--muted)'; m.style.fontWeight = '500'; m.textContent = dt || 'no date'; b.insertBefore(m, b.children[1] || null); }
     return b;
   };
+  if (floorMode) { renderFloor(list, hits, { dd, fillAll, flagged, recs, opOf, waiting, drafts, bv, fv }); $('hCount').textContent = countText(hits.length, all.length); return; }
   if (order0) { // one flat list ordered by Inspection Date (dampers with no date go last)
     const sorted = [...hits].sort((a, c) => {
       const x = dateOf(a), y = dateOf(c);
@@ -2057,6 +2239,38 @@ async function renderHome() {
   $('hCount').textContent = countText(hits.length, all.length);
 }
 $('hMiss').onclick = () => { onlyMiss = !onlyMiss; renderHome(); };
+const setFmode = () => { $('fmode').textContent = floorMode ? '▦ Table' : '☰ Checklist'; };
+setFmode();
+// bottom bar: mirrors the (hidden) top buttons so all the old logic keeps working
+async function updTabs() {
+  const tb = $('tabbar'); if (!tb) return;
+  tb.hidden = !$('projects').hidden;
+  $('tabList').classList.toggle('on', floorMode); $('tabTable').classList.toggle('on', !floorMode);
+  $('tabMap').classList.toggle('off', $('btnMap').hidden);
+  const on = $('btnOffline').classList.contains('on');
+  const sv = ($('dl').hidden ? '' : $('dl').textContent).match(/Saving photos for offline: (\d+) of (\d+)/);
+  const saving = on && sv;
+  $('dl').style.display = sv ? 'none' : ''; // the bottom bar shows the progress instead
+  $('tabOff').classList.toggle('kept', on && !saving); $('tabOff').classList.toggle('saving', !!saving);
+  $('tabOff').querySelector('span').textContent = saving ? (sv ? 'Saving ' + Math.floor(100 * sv[1] / Math.max(1, sv[2])) + '%' : 'Saving…') : on ? 'On phone' : 'Not saved';
+  $('tabOff').querySelector('b').textContent = saving ? '⏳' : on ? '📱' : '⬇';
+  let n = 0; try { n = (await allItems()).filter((i) => i.status !== 'synced').length; } catch {}
+  $('tabSyncN').hidden = !n; $('tabSyncN').textContent = n;
+  $('tabSync').querySelector('span').textContent = n ? 'Sync' : 'Synced';
+}
+$('tabList').onclick = () => { if (!floorMode) $('fmode').click(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+$('tabTable').onclick = () => { if (floorMode) $('fmode').click(); };
+$('tabMap').onclick = () => { if ($('btnMap').hidden) toast('No job map for this job yet (it comes from the job\'s Drawing table).'); else $('btnMap').click(); };
+$('tabOff').onclick = () => $('btnOffline').click();
+$('tabSync').onclick = async () => {
+  const b = $('tabSync'); b.classList.add('busy');
+  try { if (navigator.onLine) await sync(true); else toast('Offline: entries will send when you have signal.'); } finally { b.classList.remove('busy'); }
+  if (!$('savedCard').hidden) $('savedCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+{ let t = 0; const mo = new MutationObserver(() => { clearTimeout(t); t = setTimeout(updTabs, 50); });
+  for (const id of ['btnMap', 'btnOffline', 'projects', 'count', 'fmode', 'dl']) mo.observe($(id), { attributes: true, childList: true, characterData: true, subtree: true }); }
+updTabs();
+$('fmode').onclick = () => { floorMode = !floorMode; try { localStorage.setItem('fmode', floorMode ? 'list' : 'grid'); } catch {} setFmode(); renderHome(); };
 $('hIns').onchange = () => renderHome(); $('hBld').onchange = () => { try { localStorage.setItem('sel_bld', $('hBld').value); localStorage.setItem('sel_flr', ''); } catch {} $('hFlr').value = ''; renderHome(); };
 $('navPrev').onclick = () => navGo(-1); $('navNext').onclick = () => navGo(1);
 // a small ✕ on any chip that is set, to go straight back to "all"
@@ -2777,7 +2991,7 @@ function renderJobs() {
     const t = document.createElement('div'); t.className = 'jt';
     const nm = document.createElement('b'); nm.textContent = b.name;
     const sub = document.createElement('span');
-    if (o) { sub.className = 'joff'; sub.textContent = (o.mode === 'today' ? '✓ Offline today' : '✓ Kept offline') + (o.bytes ? ' · ' + fmtSize(o.bytes) : ''); }
+    if (o) { sub.className = 'joff'; sub.textContent = '📱 Saved on phone' + (o.bytes ? ' · ' + fmtSize(o.bytes) : ''); }
     else sub.textContent = b.id === c.base ? 'Open now' : rec[b.id] ? 'Opened ' + new Date(rec[b.id].t).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
     t.append(nm, sub);
     const star = document.createElement('button'); star.type = 'button'; star.className = 'jbtn' + (pn.includes(b.id) ? ' on' : ''); star.textContent = pn.includes(b.id) ? '★' : '☆'; star.setAttribute('aria-label', 'Pin');
@@ -2831,6 +3045,7 @@ async function switchJob(base, name) {
     localStorage.setItem('cfg', JSON.stringify({ ...JSON.parse(localStorage.getItem('cfg') || '{}'), base, table: snap ? snap.table : SURVEY_TABLE, view: snap ? snap.view || '' : '', idField: snap ? snap.idField || '' : '' }));
     const r = recentMap(); r[base] = { name: name || jobName(base), t: Date.now() }; localStorage.setItem('recent', JSON.stringify(r));
     lastFilled = {};
+    touchJob(base, name);
     buildFields(); showPhotoBlocks(); fillMainView(); setJobBar(); showJobs(false); renderHome(); updateMsgDot(); netState();
     if (navigator.onLine) refreshOptions(true); else if (!snap) report('This job is not saved on this phone. Connect to load it.', true);
   } finally { switching = false; }
@@ -2839,12 +3054,14 @@ let offTarget = null;
 function openOff(base, name) {
   offTarget = { base, name: name || jobName(base) };
   const o = offMap()[base];
-  $('offTitle').textContent = 'Use ' + offTarget.name + ' offline';
-  $('offHint').textContent = o ? (o.mode === 'today' ? 'Saved on this phone for today' : 'Saved on this phone until you remove it') + (o.bytes ? ' (' + fmtSize(o.bytes) + ')' : '') + '. Only the fields in its Tech View and small copies of its photos are saved.'
-    : 'Saves this job\'s dampers (only the fields in its Tech View) and small copies of its photos on this phone, so it works without signal.';
-  $('offToday').classList.toggle('secondary', !!o && o.mode !== 'today');
-  $('offKeep').classList.toggle('secondary', !o || o.mode !== 'keep');
+  const left = o ? Math.max(1, KEEP_DAYS - daysSince(o.seen || o.day)) : 0;
+  $('offTitle').textContent = o ? '📱 Saved on this phone' : 'Not saved on this phone';
+  $('offHint').textContent = o ? offTarget.name + (o.bytes ? ' (' + fmtSize(o.bytes) + ')' : '') + ' works with no signal. Every job you open is saved by itself. It clears itself if it is not opened for ' + KEEP_DAYS + ' days in a row' + (base === cfg().base ? '.' : ' (' + left + ' day' + (left === 1 ? '' : 's') + ' left).') + ' Entries waiting to sync are never cleared.'
+    : 'Open this job once with signal and it saves itself on this phone.';
+  $('offToday').hidden = true;
+  $('offKeep').hidden = !!o; $('offKeep').textContent = 'Save it now'; $('offKeep').classList.remove('secondary');
   $('offRemove').hidden = !o;
+  $('offCancel').textContent = 'Close';
   $('offDlg').showModal();
 }
 async function markOffline(mode) {
@@ -2862,10 +3079,20 @@ async function removeOffline(base) {
   if (!cur) await dropSnap(base);
   setJobBar(); renderJobs(); if (cur) renderHome();
 }
-// "Today only" jobs clear themselves the next day
-function expireOffline() { for (const [b, o] of Object.entries(offMap())) if (o.mode === 'today' && o.day !== today()) removeOffline(b); }
+// Every job you open is saved on the phone by itself. A job not opened for 14 days in a row clears itself.
+const KEEP_DAYS = 14;
+const daysSince = (d) => { const t = new Date(String(d || '') + 'T12:00'); return isNaN(t) ? 0 : Math.round((new Date(today() + 'T12:00') - t) / 864e5); };
+function touchJob(base, name) {
+  if (!base || !cfg().token) return;
+  const m = offMap(), o = m[base] || {};
+  m[base] = { ...o, mode: 'keep', day: o.day || today(), seen: today(), name: name || o.name || jobName(base) }; setOffMap(m);
+}
+function expireOffline() {
+  const cur = cfg().base;
+  for (const [b, o] of Object.entries(offMap())) if (b !== cur && daysSince(o.seen || o.day) >= KEEP_DAYS) removeOffline(b);
+}
 $('offToday').onclick = () => markOffline('today');
-$('offKeep').onclick = () => markOffline('keep');
+$('offKeep').onclick = () => { touchJob(offTarget && offTarget.base, offTarget && offTarget.name); markOffline('keep'); };
 $('offRemove').onclick = async () => { const t = offTarget; $('offDlg').close(); if (t) { await removeOffline(t.base); toast('Removed from this phone'); } };
 $('offCancel').onclick = () => $('offDlg').close();
 $('btnOffline').onclick = () => openOff(cfg().base);
@@ -2880,7 +3107,7 @@ if (localStorage.getItem('offline') == null) {
   setOffMap({});
   caches.open('beta-photos').then((pc) => pc.keys()).then((ks) => { if (ks.length) { const m = offMap(); m[cfg().base] = { mode: 'keep', day: today(), name: '' }; setOffMap(m); setJobBar(); } }).catch(() => {});
 }
-expireOffline(); setJobBar();
+touchJob(cfg().base); expireOffline(); setJobBar();
 if (!getJ('bases')) setTimeout(() => loadBases(), 3000); // learn the job names once
 
 updateMsgDot(); buildFields(); buildPhotos(); netState(); render(); fillMainView(); renderHome(); sync(); refreshOptions();
