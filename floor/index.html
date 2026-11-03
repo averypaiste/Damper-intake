@@ -316,6 +316,9 @@
   #tabbar button.on b { background:#d7efec; border-radius:12px; padding:0 14px; }
   #tabbar button.off { opacity:.35; }
   #tabbar #tabOff.kept { color:#1a7f4b; }
+  #tabbar #tabOff.saving { color:#b54708; }
+  #tabbar #tabOff.saving b { animation:pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity:.35; } }
   #tabbar i { position:absolute; top:0; left:calc(50% + 6px); min-width:18px; height:18px; border-radius:9px; background:#f79009; color:#fff; font-style:normal; font-size:11px; line-height:18px; padding:0 5px; }
   #tabbar button.busy b { animation:spin 1s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
@@ -911,7 +914,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-03-c (floor checklist test)';
+const APP_VERSION = '2026-11-03-d (floor checklist test)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -2245,8 +2248,12 @@ async function updTabs() {
   $('tabList').classList.toggle('on', floorMode); $('tabTable').classList.toggle('on', !floorMode);
   $('tabMap').classList.toggle('off', $('btnMap').hidden);
   const on = $('btnOffline').classList.contains('on');
-  $('tabOff').classList.toggle('kept', on); $('tabOff').querySelector('span').textContent = on ? $('btnOffline').textContent.replace('✓ ', '') : 'Offline';
-  $('tabOff').querySelector('b').textContent = on ? '✓' : '⬇';
+  const sv = ($('dl').hidden ? '' : $('dl').textContent).match(/Saving photos for offline: (\d+) of (\d+)/);
+  const saving = on && sv;
+  $('dl').style.display = sv ? 'none' : ''; // the bottom bar shows the progress instead
+  $('tabOff').classList.toggle('kept', on && !saving); $('tabOff').classList.toggle('saving', !!saving);
+  $('tabOff').querySelector('span').textContent = saving ? (sv ? 'Saving ' + Math.floor(100 * sv[1] / Math.max(1, sv[2])) + '%' : 'Saving…') : on ? 'On phone' : 'Not saved';
+  $('tabOff').querySelector('b').textContent = saving ? '⏳' : on ? '📱' : '⬇';
   let n = 0; try { n = (await allItems()).filter((i) => i.status !== 'synced').length; } catch {}
   $('tabSyncN').hidden = !n; $('tabSyncN').textContent = n;
   $('tabSync').querySelector('span').textContent = n ? 'Sync' : 'Synced';
@@ -2261,7 +2268,7 @@ $('tabSync').onclick = async () => {
   if (!$('savedCard').hidden) $('savedCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
 };
 { let t = 0; const mo = new MutationObserver(() => { clearTimeout(t); t = setTimeout(updTabs, 50); });
-  for (const id of ['btnMap', 'btnOffline', 'projects', 'count', 'fmode']) mo.observe($(id), { attributes: true, childList: true, characterData: true, subtree: true }); }
+  for (const id of ['btnMap', 'btnOffline', 'projects', 'count', 'fmode', 'dl']) mo.observe($(id), { attributes: true, childList: true, characterData: true, subtree: true }); }
 updTabs();
 $('fmode').onclick = () => { floorMode = !floorMode; try { localStorage.setItem('fmode', floorMode ? 'list' : 'grid'); } catch {} setFmode(); renderHome(); };
 $('hIns').onchange = () => renderHome(); $('hBld').onchange = () => { try { localStorage.setItem('sel_bld', $('hBld').value); localStorage.setItem('sel_flr', ''); } catch {} $('hFlr').value = ''; renderHome(); };
@@ -2984,7 +2991,7 @@ function renderJobs() {
     const t = document.createElement('div'); t.className = 'jt';
     const nm = document.createElement('b'); nm.textContent = b.name;
     const sub = document.createElement('span');
-    if (o) { sub.className = 'joff'; sub.textContent = (o.mode === 'today' ? '✓ Offline today' : '✓ Kept offline') + (o.bytes ? ' · ' + fmtSize(o.bytes) : ''); }
+    if (o) { sub.className = 'joff'; sub.textContent = '📱 Saved on phone' + (o.bytes ? ' · ' + fmtSize(o.bytes) : ''); }
     else sub.textContent = b.id === c.base ? 'Open now' : rec[b.id] ? 'Opened ' + new Date(rec[b.id].t).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
     t.append(nm, sub);
     const star = document.createElement('button'); star.type = 'button'; star.className = 'jbtn' + (pn.includes(b.id) ? ' on' : ''); star.textContent = pn.includes(b.id) ? '★' : '☆'; star.setAttribute('aria-label', 'Pin');
@@ -3038,6 +3045,7 @@ async function switchJob(base, name) {
     localStorage.setItem('cfg', JSON.stringify({ ...JSON.parse(localStorage.getItem('cfg') || '{}'), base, table: snap ? snap.table : SURVEY_TABLE, view: snap ? snap.view || '' : '', idField: snap ? snap.idField || '' : '' }));
     const r = recentMap(); r[base] = { name: name || jobName(base), t: Date.now() }; localStorage.setItem('recent', JSON.stringify(r));
     lastFilled = {};
+    touchJob(base, name);
     buildFields(); showPhotoBlocks(); fillMainView(); setJobBar(); showJobs(false); renderHome(); updateMsgDot(); netState();
     if (navigator.onLine) refreshOptions(true); else if (!snap) report('This job is not saved on this phone. Connect to load it.', true);
   } finally { switching = false; }
@@ -3046,12 +3054,14 @@ let offTarget = null;
 function openOff(base, name) {
   offTarget = { base, name: name || jobName(base) };
   const o = offMap()[base];
-  $('offTitle').textContent = 'Use ' + offTarget.name + ' offline';
-  $('offHint').textContent = o ? (o.mode === 'today' ? 'Saved on this phone for today' : 'Saved on this phone until you remove it') + (o.bytes ? ' (' + fmtSize(o.bytes) + ')' : '') + '. Only the fields in its Tech View and small copies of its photos are saved.'
-    : 'Saves this job\'s dampers (only the fields in its Tech View) and small copies of its photos on this phone, so it works without signal.';
-  $('offToday').classList.toggle('secondary', !!o && o.mode !== 'today');
-  $('offKeep').classList.toggle('secondary', !o || o.mode !== 'keep');
+  const left = o ? Math.max(1, KEEP_DAYS - daysSince(o.seen || o.day)) : 0;
+  $('offTitle').textContent = o ? '📱 Saved on this phone' : 'Not saved on this phone';
+  $('offHint').textContent = o ? offTarget.name + (o.bytes ? ' (' + fmtSize(o.bytes) + ')' : '') + ' works with no signal. Every job you open is saved by itself. It clears itself if it is not opened for ' + KEEP_DAYS + ' days in a row' + (base === cfg().base ? '.' : ' (' + left + ' day' + (left === 1 ? '' : 's') + ' left).') + ' Entries waiting to sync are never cleared.'
+    : 'Open this job once with signal and it saves itself on this phone.';
+  $('offToday').hidden = true;
+  $('offKeep').hidden = !!o; $('offKeep').textContent = 'Save it now'; $('offKeep').classList.remove('secondary');
   $('offRemove').hidden = !o;
+  $('offCancel').textContent = 'Close';
   $('offDlg').showModal();
 }
 async function markOffline(mode) {
@@ -3069,10 +3079,20 @@ async function removeOffline(base) {
   if (!cur) await dropSnap(base);
   setJobBar(); renderJobs(); if (cur) renderHome();
 }
-// "Today only" jobs clear themselves the next day
-function expireOffline() { for (const [b, o] of Object.entries(offMap())) if (o.mode === 'today' && o.day !== today()) removeOffline(b); }
+// Every job you open is saved on the phone by itself. A job not opened for 14 days in a row clears itself.
+const KEEP_DAYS = 14;
+const daysSince = (d) => { const t = new Date(String(d || '') + 'T12:00'); return isNaN(t) ? 0 : Math.round((new Date(today() + 'T12:00') - t) / 864e5); };
+function touchJob(base, name) {
+  if (!base || !cfg().token) return;
+  const m = offMap(), o = m[base] || {};
+  m[base] = { ...o, mode: 'keep', day: o.day || today(), seen: today(), name: name || o.name || jobName(base) }; setOffMap(m);
+}
+function expireOffline() {
+  const cur = cfg().base;
+  for (const [b, o] of Object.entries(offMap())) if (b !== cur && daysSince(o.seen || o.day) >= KEEP_DAYS) removeOffline(b);
+}
 $('offToday').onclick = () => markOffline('today');
-$('offKeep').onclick = () => markOffline('keep');
+$('offKeep').onclick = () => { touchJob(offTarget && offTarget.base, offTarget && offTarget.name); markOffline('keep'); };
 $('offRemove').onclick = async () => { const t = offTarget; $('offDlg').close(); if (t) { await removeOffline(t.base); toast('Removed from this phone'); } };
 $('offCancel').onclick = () => $('offDlg').close();
 $('btnOffline').onclick = () => openOff(cfg().base);
@@ -3087,7 +3107,7 @@ if (localStorage.getItem('offline') == null) {
   setOffMap({});
   caches.open('floor-photos').then((pc) => pc.keys()).then((ks) => { if (ks.length) { const m = offMap(); m[cfg().base] = { mode: 'keep', day: today(), name: '' }; setOffMap(m); setJobBar(); } }).catch(() => {});
 }
-expireOffline(); setJobBar();
+touchJob(cfg().base); expireOffline(); setJobBar();
 if (!getJ('bases')) setTimeout(() => loadBases(), 3000); // learn the job names once
 
 updateMsgDot(); buildFields(); buildPhotos(); netState(); render(); fillMainView(); renderHome(); sync(); refreshOptions();
