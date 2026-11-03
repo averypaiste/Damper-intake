@@ -50,8 +50,13 @@
   .mkdlg[open] { display:flex; flex-direction:column; }
   .mkbar { display:flex; gap:8px; align-items:center; padding:max(8px, env(safe-area-inset-top)) 10px 8px; color:#fff; font-size:13px; }
   .mkbar span { flex:1; text-align:center; }
-  .mkw { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:8px; }
-  .mkw canvas { max-width:100%; max-height:100%; touch-action:none; background:#fff; }
+  .mkw { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:8px; position:relative; overflow:hidden; touch-action:none; }
+  .mknav { display:flex; gap:8px; align-items:center; justify-content:center; padding:0 10px 6px; color:#fff; font-size:13px; flex-wrap:wrap; }
+  .mknav[hidden], .mknav [hidden] { display:none; }
+  .mknav select { max-width:45vw; padding:6px; border-radius:8px; }
+  .mknav button { padding:6px 14px; }
+  .mknav .addbtn { color:#fff; border-color:#fff; }
+  .mkw canvas { max-width:100%; max-height:100%; touch-action:none; background:#fff; transform-origin:0 0; }
   .pblock .pbtns .addbtn { flex:1; text-align:center; }
   .pblock .addbtn { padding:6px 12px; font-size:14px; border-radius:8px; background:transparent; color:var(--brand); border:1px solid var(--brand); cursor:pointer; font-weight:600; }
   .thumbs { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
@@ -920,7 +925,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-03-b (test copy)';
+const APP_VERSION = '2026-11-03-c (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -2258,7 +2263,7 @@ async function updTabs() {
   const saving = on && sv;
   $('dl').style.display = sv ? 'none' : ''; // the bottom bar shows the progress instead
   $('tabOff').classList.toggle('kept', on && !saving); $('tabOff').classList.toggle('saving', !!saving);
-  $('tabOff').querySelector('span').textContent = saving ? (sv ? 'Saving ' + Math.floor(100 * sv[1] / Math.max(1, sv[2])) + '%' : 'Saving…') : on ? 'On phone' : 'Not saved';
+  $('tabOff').querySelector('span').textContent = saving ? (sv ? 'Saving ' + Math.floor(100 * sv[1] / Math.max(1, sv[2])) + '%' : 'Saving…') : on ? 'Saved' : 'Not saved';
   $('tabOff').querySelector('b').textContent = saving ? '⏳' : on ? '📱' : '⬇';
   let n = 0; try { n = (await allItems()).filter((i) => i.status !== 'synced').length; } catch {}
   $('tabSyncN').hidden = !n; $('tabSyncN').textContent = n;
@@ -2305,7 +2310,9 @@ function buildPhotos() {
     if (name === LOC_PIC) { // pick a floor-map screenshot and tap the damper's spot to make a plan-style markup
       const map = document.createElement('input'); map.type = 'file'; map.accept = 'image/*'; map.id = 'm_' + fid(name);
       map.addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) locMarkup(f); });
-      btns.append(mk(map, '📍 Mark on map'), map);
+      const mb = document.createElement('button'); mb.type = 'button'; mb.className = 'addbtn'; mb.style.margin = '0'; mb.textContent = '📍 Mark on map';
+      mb.onclick = () => { if (mapsHere().length) locMarkup(); else { toast('No saved map for this job yet. Pick a screenshot of the floor map.'); map.click(); } };
+      btns.append(mb, map);
     }
     head.append(b);
     const th = document.createElement('div'); th.className = 'thumbs'; th.id = 't_' + fid(name);
@@ -2333,37 +2340,116 @@ function placeLocPic() {
   const blk = $('pb_' + fid(LOC_PIC)), dt = $(fid('Inspection Date'));
   if (blk && dt && dt.parentElement) dt.parentElement.before(blk);
 }
-// ---- Location Pic markup: pick a floor-map screenshot, tap the damper's spot, and the app draws the
-// floor plan's small square + line + label box, colored by the Operational Test result ----
+// ---- Location Pic markup: opens the job's saved map (or a screenshot), tap the damper's spot, and the app
+// draws the floor plan's small square + line + label box, colored by the Operational Test result ----
 const MARK_COL = { pass: '#c9fcc0', fail: '#f7a8b8', na: '#fff07a', other: '#c6dafc', todo: '#ffffff' };
-function markLabel() {
+const MAP_PX = 4000; // map pages are drawn this big so a zoomed-in markup stays sharp
+function markWho() { // damper ID without the building, plus building and floor to find the right map page
   const nw = $(fid('Damper ID #')), ex = $(fid('Damper IDs'));
-  return String((newMode ? nw && nw.value : ex && ex.value) || '').trim();
+  const lab = String((newMode ? nw && nw.value : ex && ex.value) || '').trim();
+  const id = lab.replace(/^.*· /, '').replace(/\s*\(\d+\)$/, ''), bld = lab.includes(' · ') ? lab.split(' · ')[0].trim() : '';
+  const fl = (id.match(/^[A-Za-z]+-?(\d+)-\d+/) || [])[1] || (($(fid('Floor')) || {}).value || '').replace(/\D+/g, '');
+  return { id, bld, fl: fl ? String(+fl) : '' };
 }
+let pdfLib = null;
+function loadPdfJs() {
+  pdfLib ||= new Promise((res, rej) => {
+    const sc = document.createElement('script'); sc.src = 'pdfjs/pdf.min.js';
+    sc.onload = () => { const L = window.pdfjsLib; L.GlobalWorkerOptions.workerSrc = 'pdfjs/pdf.worker.min.js'; res(L); };
+    sc.onerror = () => { pdfLib = null; rej(new Error('pdfjs')); };
+    document.head.append(sc);
+  });
+  return pdfLib;
+}
+const ORD = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth', 'eleventh', 'twelfth'];
+const reEsc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+async function bestPage(doc, who) { // the page whose text names this floor (and building); page 1 when unsure
+  if (!who.fl) return 1;
+  const n = who.fl, w = ORD[+n];
+  const fre = new RegExp(`\\b0?${n}(?:st|nd|rd|th)?\\s*(?:fl\\.?|floor|flr|level|lvl)\\b|\\b(?:floor|flr|level|lvl)\\s*[-#:]?\\s*0?${n}\\b` + (w ? `|\\b${w}\\s+floor\\b` : ''), 'i');
+  const bre = who.bld && new RegExp(`\\b(?:bldg\\.?|building)\\s*[-:#]?\\s*${reEsc(who.bld)}\\b|\\b${reEsc(who.bld)}\\s*-?\\s*(?:bldg|building)\\b`, 'i');
+  let best = 0, at = 1, ties = 0;
+  for (let i = 1; i <= Math.min(doc.numPages, 80); i++) {
+    let t = ''; try { t = (await (await doc.getPage(i)).getTextContent()).items.map((x) => x.str).join(' '); } catch {}
+    const sc = (fre.test(t) ? 2 : 0) + (bre && bre.test(t) ? 1 : 0);
+    if (sc > best) { best = sc; at = i; ties = 0; } else if (sc && sc === best) ties++;
+  }
+  return best >= 2 && !ties ? at : 1;
+}
+function mapsHere() { const cur = mapIdx()[cfg().base]; return ((cur && cur.items) || []).filter((m) => /pdf/i.test(m.type) || /\.pdf$/i.test(m.fn) || /image/i.test(m.type)); }
 async function locMarkup(file) {
-  let bmp; try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { toast('Could not read that picture'); return; }
-  const k = Math.min(1, MAX_DIM / Math.max(bmp.width, bmp.height));
-  const W = Math.round(bmp.width * k), H = Math.round(bmp.height * k);
-  const base = document.createElement('canvas'); base.width = W; base.height = H;
-  const bx = base.getContext('2d'); bx.fillStyle = '#fff'; bx.fillRect(0, 0, W, H); bx.drawImage(bmp, 0, 0, W, H); bmp.close && bmp.close();
-  const px = bx.getImageData(0, 0, W, H).data;
+  const who = markWho(), text = who.id || 'Damper';
   const op = ($(fid('Operational Test')) || {}).value || '';
-  const fill = MARK_COL[STAT(op)], text = markLabel() || 'Damper';
-  const u = Math.max(W, H) / 100; // one drawing unit, so the marks look the same on any size of screenshot
-  const sq = Math.max(8, Math.round(u * 0.8)), fs = Math.max(12, Math.round(u * 1.4));
-  const font = `600 ${fs}px -apple-system, system-ui, sans-serif`;
+  const fill = MARK_COL[STAT(op)];
+  const maps = file ? [] : mapsHere();
   const dlg = document.createElement('dialog'); dlg.className = 'mkdlg';
   const bar = document.createElement('div'); bar.className = 'mkbar';
   const no = document.createElement('button'); no.type = 'button'; no.className = 'secondary'; no.textContent = 'Cancel';
-  const tip = document.createElement('span'); tip.textContent = 'Tap where the damper is. Drag the label to move it.' + (op ? '' : ' No test result yet, so the label is white.');
+  const tip = document.createElement('span'); tip.textContent = 'Pinch to zoom. Tap where the damper is. Drag the label to move it.' + (op ? '' : ' No test result yet, so the label is white.');
   const ok = document.createElement('button'); ok.type = 'button'; ok.textContent = 'Use as Location Pic'; ok.disabled = true;
   bar.append(no, tip, ok);
+  const nav = document.createElement('div'); nav.className = 'mknav';
+  const pick = document.createElement('select'); pick.setAttribute('aria-label', 'Map');
+  maps.forEach((m, i) => pick.add(new Option(m.rec && m.rec !== m.fn ? m.rec + ' · ' + m.fn : m.fn, i)));
+  const prev = document.createElement('button'); prev.type = 'button'; prev.className = 'secondary'; prev.textContent = '‹';
+  const pg = document.createElement('span');
+  const next = document.createElement('button'); next.type = 'button'; next.className = 'secondary'; next.textContent = '›';
+  const shot = document.createElement('label'); shot.className = 'addbtn'; shot.textContent = '🖼 Screenshot';
+  const shotIn = document.createElement('input'); shotIn.type = 'file'; shotIn.accept = 'image/*'; shotIn.hidden = true; shot.append(shotIn);
+  if (maps.length > 1) nav.append(pick);
+  nav.append(prev, pg, next, shot);
   const wrap = document.createElement('div'); wrap.className = 'mkw';
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H; wrap.append(cv);
-  dlg.append(bar, wrap); document.body.append(dlg); dlg.showModal();
-  const g = cv.getContext('2d'); g.font = font;
-  const bw = Math.round(g.measureText(text).width + fs), bh = Math.round(fs * 1.7);
-  let pt = null, lab = null, moved = false, drag = null;
+  const cv = document.createElement('canvas'); wrap.append(cv);
+  dlg.append(bar, nav, wrap); document.body.append(dlg); dlg.showModal();
+  const g = cv.getContext('2d');
+  let W = 0, H = 0, px = null, base = null, u = 1, sq = 8, fs = 12, font = '', bw = 0, bh = 0;
+  let pt = null, lab = null, moved = false, drag = null, doc = null, page = 1, busy = false;
+  let resetZoom = () => {};
+  const close = () => { dlg.close(); dlg.remove(); if (doc) doc.destroy(); };
+  const setPic = (src, w, h) => { // a new map page or screenshot: start over on it
+    const k = Math.min(1, (doc ? MAP_PX : MAX_DIM) / Math.max(w, h));
+    W = Math.round(w * k); H = Math.round(h * k);
+    base = document.createElement('canvas'); base.width = W; base.height = H;
+    const bx = base.getContext('2d'); bx.fillStyle = '#fff'; bx.fillRect(0, 0, W, H); bx.drawImage(src, 0, 0, W, H);
+    px = bx.getImageData(0, 0, W, H).data;
+    cv.width = W; cv.height = H;
+    u = Math.max(W, H) / 100; // one drawing unit, so the marks look the same on any size of picture
+    sq = Math.max(8, Math.round(u * 0.8)); fs = Math.max(12, Math.round(u * 1.4));
+    font = `600 ${fs}px -apple-system, system-ui, sans-serif`; g.font = font;
+    bw = Math.round(g.measureText(text).width + fs); bh = Math.round(fs * 1.7);
+    pt = null; lab = null; moved = false; ok.disabled = true; resetZoom(); draw();
+  };
+  const fromFile = async (f) => {
+    let bmp; try { bmp = await createImageBitmap(f, { imageOrientation: 'from-image' }); } catch { toast('Could not read that picture'); return false; }
+    if (doc) { doc.destroy(); doc = null; }
+    setPic(bmp, bmp.width, bmp.height); bmp.close && bmp.close();
+    nav.hidden = !maps.length; prev.hidden = next.hidden = pg.hidden = true; return true;
+  };
+  const showPage = async (n) => {
+    if (!doc || busy) return; busy = true;
+    try {
+      page = Math.max(1, Math.min(doc.numPages, n));
+      const p = await doc.getPage(page), v1 = p.getViewport({ scale: 1 });
+      const v = p.getViewport({ scale: Math.min(4, MAP_PX / Math.max(v1.width, v1.height)) });
+      const c = document.createElement('canvas'); c.width = Math.round(v.width); c.height = Math.round(v.height);
+      const cx = c.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
+      await p.render({ canvasContext: cx, viewport: v }).promise;
+      setPic(c, c.width, c.height);
+      pg.textContent = 'Page ' + page + ' of ' + doc.numPages; prev.disabled = page <= 1; next.disabled = page >= doc.numPages;
+    } catch { toast('Could not draw that page'); } finally { busy = false; }
+  };
+  const openMap = async (i) => {
+    const m = maps[i]; pg.textContent = 'Opening map…'; prev.hidden = next.hidden = pg.hidden = false;
+    let blob; try { blob = await mapBlob(m); } catch { toast('This map is not saved on this device yet. Open the job once with signal.'); pg.textContent = ''; return; }
+    if (doc) { doc.destroy(); doc = null; }
+    if (!/pdf/i.test(m.type) && !/\.pdf$/i.test(m.fn)) { await fromFile(blob); return; }
+    try {
+      const L = await loadPdfJs();
+      doc = await L.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+      pg.textContent = 'Finding floor ' + (who.fl || '') + '…';
+      await showPage(await bestPage(doc, who));
+    } catch { toast('Could not open this map. Use 🖼 Screenshot instead.'); pg.textContent = ''; }
+  };
   const light = (x, y) => { // share of empty (light) pixels under a label spot
     let n = 0, w = 0;
     for (let yy = y; yy < y + bh; yy += 3) for (let xx = x; xx < x + bw; xx += 3) { const i = (yy * W + xx) * 4; n++; if (px[i] + px[i + 1] + px[i + 2] > 690) w++; }
@@ -2380,7 +2466,8 @@ async function locMarkup(file) {
     }
     lab = best || { x: Math.max(2, Math.min(W - bw - 2, pt.x - bw / 2)), y: Math.max(2, Math.min(H - bh - 2, pt.y - 8 * u)) };
   };
-  const draw = () => {
+  function draw() {
+    if (!base) return;
     g.drawImage(base, 0, 0);
     if (!pt) return;
     const ex = Math.max(lab.x, Math.min(pt.x, lab.x + bw)), ey = Math.max(lab.y, Math.min(pt.y, lab.y + bh));
@@ -2389,31 +2476,89 @@ async function locMarkup(file) {
     g.fillStyle = fill; g.fillRect(lab.x, lab.y, bw, bh); g.strokeRect(lab.x, lab.y, bw, bh);
     g.lineWidth = Math.max(2, u * 0.3); g.fillRect(pt.x - sq / 2, pt.y - sq / 2, sq, sq); g.strokeRect(pt.x - sq / 2, pt.y - sq / 2, sq, sq);
     g.fillStyle = '#000'; g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, lab.x + bw / 2, lab.y + bh / 2 + 1);
-  };
-  draw();
+  }
   const at = (e) => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height }; };
+  // pinch to zoom, drag to move around, tap to place the square, drag the label to move it
+  let z = 1, tx = 0, ty = 0, pinch = null, tap = null;
+  const ptrs = new Map();
+  const applyZ = () => { cv.style.transform = `translate(${tx}px,${ty}px) scale(${z})`; };
+  const origin = () => { const r = wrap.getBoundingClientRect(); return { x: r.left + cv.offsetLeft, y: r.top + cv.offsetTop }; };
+  resetZoom = () => { z = 1; tx = ty = 0; applyZ(); };
   cv.onpointerdown = (e) => {
+    if (!base) return;
+    cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.size === 2) { // second finger: start pinching
+      const [a1, a2] = [...ptrs.values()], o = origin();
+      const mx = (a1.x + a2.x) / 2, my = (a1.y + a2.y) / 2;
+      pinch = { d: Math.hypot(a1.x - a2.x, a1.y - a2.y) || 1, z, cx: (mx - o.x - tx) / z, cy: (my - o.y - ty) / z };
+      drag = null; tap = null; return;
+    }
     const p = at(e);
-    if (lab && p.x >= lab.x && p.x <= lab.x + bw && p.y >= lab.y && p.y <= lab.y + bh) { drag = { dx: p.x - lab.x, dy: p.y - lab.y }; cv.setPointerCapture(e.pointerId); return; }
-    pt = { x: Math.round(p.x), y: Math.round(p.y) }; if (!moved) place();
-    ok.disabled = false; draw();
+    if (lab && p.x >= lab.x && p.x <= lab.x + bw && p.y >= lab.y && p.y <= lab.y + bh) { drag = { dx: p.x - lab.x, dy: p.y - lab.y }; return; }
+    tap = { x: e.clientX, y: e.clientY, tx, ty, moved: false };
   };
   cv.onpointermove = (e) => {
-    if (!drag) return; const p = at(e);
-    lab = { x: Math.round(Math.max(0, Math.min(W - bw, p.x - drag.dx))), y: Math.round(Math.max(0, Math.min(H - bh, p.y - drag.dy))) };
-    moved = true; draw();
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && ptrs.size >= 2) {
+      const [a1, a2] = [...ptrs.values()], o = origin();
+      const mx = (a1.x + a2.x) / 2, my = (a1.y + a2.y) / 2;
+      z = Math.max(1, Math.min(10, pinch.z * Math.hypot(a1.x - a2.x, a1.y - a2.y) / pinch.d));
+      tx = mx - o.x - pinch.cx * z; ty = my - o.y - pinch.cy * z; if (z === 1) tx = ty = 0;
+      applyZ(); return;
+    }
+    if (drag) {
+      const p = at(e);
+      lab = { x: Math.round(Math.max(0, Math.min(W - bw, p.x - drag.dx))), y: Math.round(Math.max(0, Math.min(H - bh, p.y - drag.dy))) };
+      moved = true; draw(); return;
+    }
+    if (tap) {
+      const dx = e.clientX - tap.x, dy = e.clientY - tap.y;
+      if (Math.hypot(dx, dy) > 8) tap.moved = true;
+      if (tap.moved && z > 1) { tx = tap.tx + dx; ty = tap.ty + dy; applyZ(); }
+    }
   };
-  cv.onpointerup = cv.onpointercancel = () => { drag = null; };
-  const close = () => { dlg.close(); dlg.remove(); };
+  const up = (e) => {
+    ptrs.delete(e.pointerId);
+    if (pinch) { if (!ptrs.size) pinch = null; return; }
+    if (tap && !tap.moved && e.type === 'pointerup') {
+      const p = at(e); pt = { x: Math.round(p.x), y: Math.round(p.y) };
+      { // size the marks to what is on screen, so they look the same zoomed in or out
+        const r = cv.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+        const vis = Math.max((Math.min(r.right, wr.right) - Math.max(r.left, wr.left)) * W / r.width, (Math.min(r.bottom, wr.bottom) - Math.max(r.top, wr.top)) * H / r.height);
+        u = Math.max(4, vis / 100); sq = Math.max(8, Math.round(u * 0.8)); fs = Math.max(12, Math.round(u * 1.4));
+        font = `600 ${fs}px -apple-system, system-ui, sans-serif`; g.font = font; bw = Math.round(g.measureText(text).width + fs); bh = Math.round(fs * 1.7);
+        if (lab) lab = { x: Math.max(0, Math.min(W - bw, lab.x)), y: Math.max(0, Math.min(H - bh, lab.y)) };
+      }
+      if (!moved) place();
+      ok.disabled = false; draw();
+    }
+    tap = null; drag = null;
+  };
+  cv.onpointerup = up; cv.onpointercancel = up;
+  prev.onclick = () => showPage(page - 1); next.onclick = () => showPage(page + 1);
+  pick.onchange = () => openMap(+pick.value);
+  shotIn.onchange = async () => { const f = shotIn.files[0]; shotIn.value = ''; if (f) await fromFile(f); };
   no.onclick = close; dlg.addEventListener('cancel', (e) => { e.preventDefault(); close(); });
   ok.onclick = () => {
     draw();
-    cv.toBlob((blob) => {
+    let out = cv;
+    if (z > 1.05) { // zoomed in: keep what is on screen (plus the square and label) so the picture is easy to read
+      const r = cv.getBoundingClientRect(), wr = wrap.getBoundingClientRect(), kx = W / r.width, ky = H / r.height, m = 2 * u;
+      let x0 = (Math.max(r.left, wr.left) - r.left) * kx, y0 = (Math.max(r.top, wr.top) - r.top) * ky;
+      let x1 = (Math.min(r.right, wr.right) - r.left) * kx, y1 = (Math.min(r.bottom, wr.bottom) - r.top) * ky;
+      x0 = Math.max(0, Math.min(x0, pt.x - m, lab.x - m)); y0 = Math.max(0, Math.min(y0, pt.y - m, lab.y - m));
+      x1 = Math.min(W, Math.max(x1, pt.x + m, lab.x + bw + m)); y1 = Math.min(H, Math.max(y1, pt.y + m, lab.y + bh + m));
+      out = document.createElement('canvas'); out.width = Math.round(x1 - x0); out.height = Math.round(y1 - y0);
+      out.getContext('2d').drawImage(cv, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+    }
+    out.toBlob((blob) => {
       if (!blob) { toast('Could not save the markup'); return; }
       (pendingPhotos[LOC_PIC] ||= []).push({ blob, url: URL.createObjectURL(blob) });
       renderThumbs(LOC_PIC); scheduleDraft(); close(); toast('Markup added to Location Pic');
     }, 'image/jpeg', 0.9);
   };
+  if (file) { nav.hidden = true; if (!await fromFile(file)) close(); } else await openMap(0);
 }
 function applyKeeps() {
   const k = keepVals();

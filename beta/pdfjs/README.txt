@@ -1,0 +1,1 @@
+pdf.js 3.11.174 (Mozilla, Apache-2.0), from the pdfjs-dist npm package. Used by Mark on map to show the job's map PDF.
