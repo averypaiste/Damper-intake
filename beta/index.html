@@ -45,7 +45,13 @@
   .pblock .ph { display:flex; align-items:center; gap:8px; }
   .pblock .ph b { flex:1; }
   .pblock input[type=file] { display:none; }
-  .pblock .pbtns { display:flex; gap:8px; margin-top:8px; }
+  .pblock .pbtns { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+  .mkdlg { width:100vw; height:100dvh; max-width:none; max-height:none; margin:0; padding:0; border:0; background:#111; }
+  .mkdlg[open] { display:flex; flex-direction:column; }
+  .mkbar { display:flex; gap:8px; align-items:center; padding:max(8px, env(safe-area-inset-top)) 10px 8px; color:#fff; font-size:13px; }
+  .mkbar span { flex:1; text-align:center; }
+  .mkw { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:8px; }
+  .mkw canvas { max-width:100%; max-height:100%; touch-action:none; background:#fff; }
   .pblock .pbtns .addbtn { flex:1; text-align:center; }
   .pblock .addbtn { padding:6px 12px; font-size:14px; border-radius:8px; background:transparent; color:var(--brand); border:1px solid var(--brand); cursor:pointer; font-weight:600; }
   .thumbs { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
@@ -914,7 +920,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-03-a (test copy)';
+const APP_VERSION = '2026-11-03-b (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -2296,6 +2302,11 @@ function buildPhotos() {
     const mk = (input, text) => { const l = document.createElement('label'); l.className = 'addbtn'; l.htmlFor = input.id; l.textContent = text; l.style.margin = '0'; return l; };
     const btns = document.createElement('div'); btns.className = 'pbtns';
     btns.append(mk(cam, '📷 Take photo'), mk(inp, '🖼 Camera roll'), mk(doc, '📁 Choose file'), cam, inp, doc);
+    if (name === LOC_PIC) { // pick a floor-map screenshot and tap the damper's spot to make a plan-style markup
+      const map = document.createElement('input'); map.type = 'file'; map.accept = 'image/*'; map.id = 'm_' + fid(name);
+      map.addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) locMarkup(f); });
+      btns.append(mk(map, '📍 Mark on map'), map);
+    }
     head.append(b);
     const th = document.createElement('div'); th.className = 'thumbs'; th.id = 't_' + fid(name);
     const ex = document.createElement('div'); ex.id = 'ex_' + fid(name); ex.hidden = true;
@@ -2321,6 +2332,88 @@ function showPhotoBlocks() { const no = noPics(); for (const n of PHOTOS) { cons
 function placeLocPic() {
   const blk = $('pb_' + fid(LOC_PIC)), dt = $(fid('Inspection Date'));
   if (blk && dt && dt.parentElement) dt.parentElement.before(blk);
+}
+// ---- Location Pic markup: pick a floor-map screenshot, tap the damper's spot, and the app draws the
+// floor plan's small square + line + label box, colored by the Operational Test result ----
+const MARK_COL = { pass: '#c9fcc0', fail: '#f7a8b8', na: '#fff07a', other: '#c6dafc', todo: '#ffffff' };
+function markLabel() {
+  const nw = $(fid('Damper ID #')), ex = $(fid('Damper IDs'));
+  return String((newMode ? nw && nw.value : ex && ex.value) || '').trim();
+}
+async function locMarkup(file) {
+  let bmp; try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { toast('Could not read that picture'); return; }
+  const k = Math.min(1, MAX_DIM / Math.max(bmp.width, bmp.height));
+  const W = Math.round(bmp.width * k), H = Math.round(bmp.height * k);
+  const base = document.createElement('canvas'); base.width = W; base.height = H;
+  const bx = base.getContext('2d'); bx.fillStyle = '#fff'; bx.fillRect(0, 0, W, H); bx.drawImage(bmp, 0, 0, W, H); bmp.close && bmp.close();
+  const px = bx.getImageData(0, 0, W, H).data;
+  const op = ($(fid('Operational Test')) || {}).value || '';
+  const fill = MARK_COL[STAT(op)], text = markLabel() || 'Damper';
+  const u = Math.max(W, H) / 100; // one drawing unit, so the marks look the same on any size of screenshot
+  const sq = Math.max(8, Math.round(u * 0.8)), fs = Math.max(12, Math.round(u * 1.4));
+  const font = `600 ${fs}px -apple-system, system-ui, sans-serif`;
+  const dlg = document.createElement('dialog'); dlg.className = 'mkdlg';
+  const bar = document.createElement('div'); bar.className = 'mkbar';
+  const no = document.createElement('button'); no.type = 'button'; no.className = 'secondary'; no.textContent = 'Cancel';
+  const tip = document.createElement('span'); tip.textContent = 'Tap where the damper is. Drag the label to move it.' + (op ? '' : ' No test result yet, so the label is white.');
+  const ok = document.createElement('button'); ok.type = 'button'; ok.textContent = 'Use as Location Pic'; ok.disabled = true;
+  bar.append(no, tip, ok);
+  const wrap = document.createElement('div'); wrap.className = 'mkw';
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H; wrap.append(cv);
+  dlg.append(bar, wrap); document.body.append(dlg); dlg.showModal();
+  const g = cv.getContext('2d'); g.font = font;
+  const bw = Math.round(g.measureText(text).width + fs), bh = Math.round(fs * 1.7);
+  let pt = null, lab = null, moved = false, drag = null;
+  const light = (x, y) => { // share of empty (light) pixels under a label spot
+    let n = 0, w = 0;
+    for (let yy = y; yy < y + bh; yy += 3) for (let xx = x; xx < x + bw; xx += 3) { const i = (yy * W + xx) * 4; n++; if (px[i] + px[i + 1] + px[i + 2] > 690) w++; }
+    return w / Math.max(1, n);
+  };
+  const place = () => { // put the label where the plan is emptiest, close to the square
+    let best = null;
+    for (const d of [8, 12, 17]) for (let a = 0; a < 8; a++) {
+      const ang = -Math.PI / 4 + a * Math.PI / 4;
+      const x = Math.round(pt.x + Math.cos(ang) * d * u - bw / 2), y = Math.round(pt.y + Math.sin(ang) * d * u - bh / 2);
+      if (x < 2 || y < 2 || x + bw > W - 2 || y + bh > H - 2) continue;
+      const s = light(x, y) - d / 200;
+      if (!best || s > best.s) best = { x, y, s };
+    }
+    lab = best || { x: Math.max(2, Math.min(W - bw - 2, pt.x - bw / 2)), y: Math.max(2, Math.min(H - bh - 2, pt.y - 8 * u)) };
+  };
+  const draw = () => {
+    g.drawImage(base, 0, 0);
+    if (!pt) return;
+    const ex = Math.max(lab.x, Math.min(pt.x, lab.x + bw)), ey = Math.max(lab.y, Math.min(pt.y, lab.y + bh));
+    g.strokeStyle = '#000'; g.lineWidth = Math.max(1.5, u * 0.22);
+    g.beginPath(); g.moveTo(pt.x, pt.y); g.lineTo(ex, ey); g.stroke();
+    g.fillStyle = fill; g.fillRect(lab.x, lab.y, bw, bh); g.strokeRect(lab.x, lab.y, bw, bh);
+    g.lineWidth = Math.max(2, u * 0.3); g.fillRect(pt.x - sq / 2, pt.y - sq / 2, sq, sq); g.strokeRect(pt.x - sq / 2, pt.y - sq / 2, sq, sq);
+    g.fillStyle = '#000'; g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, lab.x + bw / 2, lab.y + bh / 2 + 1);
+  };
+  draw();
+  const at = (e) => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height }; };
+  cv.onpointerdown = (e) => {
+    const p = at(e);
+    if (lab && p.x >= lab.x && p.x <= lab.x + bw && p.y >= lab.y && p.y <= lab.y + bh) { drag = { dx: p.x - lab.x, dy: p.y - lab.y }; cv.setPointerCapture(e.pointerId); return; }
+    pt = { x: Math.round(p.x), y: Math.round(p.y) }; if (!moved) place();
+    ok.disabled = false; draw();
+  };
+  cv.onpointermove = (e) => {
+    if (!drag) return; const p = at(e);
+    lab = { x: Math.round(Math.max(0, Math.min(W - bw, p.x - drag.dx))), y: Math.round(Math.max(0, Math.min(H - bh, p.y - drag.dy))) };
+    moved = true; draw();
+  };
+  cv.onpointerup = cv.onpointercancel = () => { drag = null; };
+  const close = () => { dlg.close(); dlg.remove(); };
+  no.onclick = close; dlg.addEventListener('cancel', (e) => { e.preventDefault(); close(); });
+  ok.onclick = () => {
+    draw();
+    cv.toBlob((blob) => {
+      if (!blob) { toast('Could not save the markup'); return; }
+      (pendingPhotos[LOC_PIC] ||= []).push({ blob, url: URL.createObjectURL(blob) });
+      renderThumbs(LOC_PIC); scheduleDraft(); close(); toast('Markup added to Location Pic');
+    }, 'image/jpeg', 0.9);
+  };
 }
 function applyKeeps() {
   const k = keepVals();
