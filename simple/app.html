@@ -1,0 +1,827 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a7f4b">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Damper Form</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --ink:#1b1f24; --muted:#667085; --brand:#1f4e79; --ok:#1a7f4b; --err:#b42318; --line:#e3e6ea; --blue:#2d7ff9; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#12151a; --card:#1b2028; --ink:#e8ecf1; --muted:#98a2b3; --brand:#5b9bd5; --line:#2e3642; } }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+  body { margin:0; font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--card); color:var(--ink); }
+  [hidden] { display:none !important; }
+  header { position:sticky; top:0; z-index:5; background:#1a7f4b; color:#fff; padding:10px 12px; padding-top:max(10px, env(safe-area-inset-top)); display:flex; align-items:center; gap:8px; }
+  header.off { background:#b42318; }
+  #ttl { flex:1; min-width:0; }
+  #ttl b { display:block; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #ttl span { display:block; font-size:12px; font-weight:600; opacity:.95; }
+  header button { flex:0 0 auto; background:transparent; color:#fff; border:1px solid #fff; border-radius:99px; height:36px; min-width:36px; padding:0 10px; font-size:14px; }
+  button { font:inherit; font-weight:600; padding:12px 16px; border:0; border-radius:10px; background:var(--brand); color:#fff; cursor:pointer; }
+  button.secondary { background:transparent; color:var(--brand); border:1px solid var(--brand); }
+  button.small { padding:6px 10px; font-size:14px; }
+  /* damper page look, same as the main tool */
+  #dHead { display:flex; align-items:center; gap:10px; padding:12px 16px 4px; max-width:640px; margin:0 auto; }
+  #dTitle { flex:1; font-size:19px; font-weight:700; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #dTitle.ph { color:var(--muted); font-weight:500; }
+  main { max-width:640px; margin:0 auto; padding:0 16px 110px; }
+  .sect { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:26px 0 0; padding-bottom:4px; border-bottom:2px solid var(--line); }
+  .fld { border-bottom:1px solid var(--line); padding-bottom:12px; }
+  label, .lbl { display:block; font-size:13px; font-weight:500; color:var(--muted); margin:16px 0 6px; }
+  .req::after { content:' *'; color:#d92d20; }
+  input, select, textarea { width:100%; font:inherit; font-size:16px; padding:11px 12px; border:1px solid transparent; border-radius:6px; background:var(--bg); color:var(--ink); }
+  input:focus, select:focus, textarea:focus { border-color:var(--blue); outline:0; background:var(--card); }
+  textarea { min-height:96px; resize:vertical; }
+  .two { display:flex; gap:8px; } .two > * { flex:1; min-width:0; }
+  .three { display:flex; gap:8px; } .three > div { flex:1; min-width:0; }
+  .three small { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .hint { font-size:13px; color:var(--muted); margin:6px 0 0; }
+  .chip { display:inline-flex; align-items:center; gap:6px; padding:3px 11px; border-radius:99px; font-size:14px; font-weight:500; color:#1b1f24; background:#e4e7ec; max-width:100%; white-space:normal; text-align:left; }
+  .pillbox { position:relative; min-height:44px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:8px 30px 8px 12px; background:var(--bg); border-radius:6px; cursor:pointer; }
+  .pillbox::after { content:'▾'; position:absolute; right:12px; top:50%; transform:translateY(-50%); color:var(--muted); }
+  .pillbox .ph { color:var(--muted); }
+  .pillbox[data-k=notes] .chip, .pillbox[data-k=follow] .chip { border-radius:14px; padding:6px 12px; line-height:1.35; }
+  .pillbox .x { margin-right:-4px; font-weight:700; opacity:.6; padding:0 2px; }
+  /* status: colored ovals, one tap */
+  .stat { display:flex; flex-wrap:wrap; gap:8px; }
+  .stat button { padding:0; background:transparent; border-radius:99px; }
+  .stat .chip { font-size:15px; padding:7px 14px; border:2px solid transparent; }
+  .stat .on .chip { border-color:#1b1f24; box-shadow:0 0 0 2px var(--card) inset; }
+  .ckc { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:#1b1f24; color:#fff; font-size:11px; font-weight:800; margin-right:-6px; }
+  /* damper picker */
+  .dbox { position:relative; min-height:48px; padding:10px 30px 10px 12px; background:var(--bg); border-radius:6px; cursor:pointer; }
+  .dbox::after { content:'▾'; position:absolute; right:12px; top:50%; transform:translateY(-50%); color:var(--muted); }
+  .dbox b { display:block; }
+  .dbox span { display:block; font-size:13px; color:var(--muted); }
+  .dbox .ph { color:var(--muted); font-weight:400; }
+  /* photos */
+  .pblock { margin-top:16px; }
+  .pblock .ph2 { font-size:13px; font-weight:500; color:var(--muted); }
+  .pbtns { display:flex; gap:8px; margin-top:8px; }
+  .pbtns label { margin:0; flex:0 1 auto; border-radius:99px; background:var(--bg); border:1px solid var(--line); color:var(--ink); padding:9px 14px; font-size:14px; font-weight:600; cursor:pointer; }
+  .pbtns input { display:none; }
+  .thumbs { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .thumb { position:relative; width:84px; height:84px; border-radius:8px; overflow:hidden; border:1px solid var(--line); }
+  .thumb img { width:100%; height:100%; object-fit:cover; }
+  .thumb button { position:absolute; top:2px; right:2px; padding:0 7px; font-size:14px; line-height:22px; background:rgba(0,0,0,.65); border-radius:99px; }
+  /* bottom bar */
+  #bar { position:fixed; left:0; right:0; bottom:0; z-index:6; display:flex; gap:8px; padding:10px 12px calc(10px + env(safe-area-inset-bottom)); background:var(--card); border-top:1px solid var(--line); }
+  #bar button { flex:1; padding:13px 8px; }
+  #bar #bClear { flex:0 0 auto; background:transparent; color:#b42318; border:1px solid var(--line); }
+  #bar #bSave { flex:2; background:#1a7f4b; }
+  #bar #bExport { background:transparent; color:var(--brand); border:1px solid var(--brand); }
+  /* saved list */
+  .item { display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--line); cursor:pointer; }
+  .item:first-child { border-top:0; }
+  .item .t { flex:1; min-width:0; }
+  .item .t b { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .item .t span { font-size:13px; color:var(--muted); }
+  .item .chip { font-size:12px; padding:2px 9px; flex:0 0 auto; }
+  .dayh { font-size:13px; font-weight:700; margin:14px 0 2px; display:flex; justify-content:space-between; }
+  .dayh span { color:var(--muted); font-weight:500; }
+  .exp { font-size:11px; color:var(--ok); font-weight:700; }
+  /* dialogs / sheets */
+  dialog { border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--ink); max-width:480px; width:92%; }
+  dialog::backdrop { background:rgba(0,0,0,.5); }
+  dialog.sheet[open] { top:auto; bottom:0; margin:0; width:100%; max-width:100%; max-height:85vh; max-height:85dvh; border:0; border-radius:16px 16px 0 0; padding:14px 16px calc(16px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; overflow:hidden; }
+  #picker.tall[open] { height:85vh; height:85dvh; }
+  .pkhead { position:relative; display:flex; align-items:center; justify-content:center; min-height:32px; margin-bottom:6px; }
+  .pkhead h2 { font-size:17px; font-weight:600; margin:0; padding:0 64px; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pkhead button { position:absolute; right:-4px; top:50%; transform:translateY(-50%); background:transparent; color:var(--blue); font-weight:500; font-size:17px; padding:6px; }
+  #pkSearch { border:0; background:transparent; padding:8px 2px; flex:0 0 auto; }
+  #pkFilters { display:flex; gap:8px; margin-bottom:6px; flex:0 0 auto; }
+  #pkFilters select { padding:8px 10px; font-size:15px; }
+  #pkList { flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
+  #pkList.flow { display:flex; flex-wrap:wrap; gap:9px 8px; align-content:flex-start; padding:4px 0 8px; }
+  .pkpill { background:transparent; border:0; padding:0; border-radius:99px; max-width:100%; }
+  .pkpill .chip { font-size:15px; padding:5px 14px; border-radius:14px; line-height:1.35; }
+  .pkclear { border:1px solid var(--line); color:var(--muted); padding:5px 14px; font-size:15px; font-weight:500; background:transparent; border-radius:99px; }
+  .pkitem { display:block; width:100%; text-align:left; background:transparent; color:var(--ink); border:0; border-bottom:1px solid var(--line); border-radius:0; padding:11px 4px; font-weight:500; }
+  .pkitem small { display:block; color:var(--muted); font-weight:400; font-size:13px; }
+  .pkitem .last { float:right; font-size:12px; color:var(--muted); font-weight:500; }
+  .pknew { color:var(--blue); }
+  .mapi { border-top:1px solid var(--line); padding:12px 0; }
+  .mapi:first-child { border-top:0; }
+  .mapi b { display:block; word-break:break-word; }
+  .mapi span { display:block; font-size:13px; color:var(--muted); }
+  .mapi .mb { display:flex; gap:8px; margin-top:8px; } .mapi .mb button { flex:1; padding:10px; }
+  .dlgbtns { display:flex; gap:8px; margin-top:14px; } .dlgbtns > * { flex:1; }
+  .opt { display:block; width:100%; text-align:left; margin-top:8px; }
+  .opt small { display:block; font-weight:400; opacity:.85; }
+  #toast { position:fixed; left:50%; bottom:calc(84px + env(safe-area-inset-bottom)); transform:translateX(-50%); background:#1b1f24; color:#fff; padding:10px 16px; border-radius:99px; font-size:14px; font-weight:600; z-index:30; max-width:90vw; text-align:center; }
+  #editBar { background:#fff4e5; color:#7a3e00; border-radius:8px; padding:8px 12px; margin:10px 0 0; font-size:14px; display:flex; align-items:center; gap:8px; }
+  #editBar span { flex:1; }
+  /* computer / tablet: use the whole screen instead of a phone-width strip */
+  @media (min-width:820px) {
+    body { font-size:17px; }
+    header { padding:12px 32px; } #ttl b { font-size:18px; } #ttl span { font-size:13px; } header button { height:40px; font-size:15px; padding:0 14px; }
+    #dHead, main { max-width:1180px; padding-left:32px; padding-right:32px; }
+    #dHead { padding-top:20px; } #dTitle { font-size:24px; }
+    main { display:grid; grid-template-columns:1fr 1fr; column-gap:36px; align-items:start; padding-bottom:120px; }
+    main > .sect, main > #editBar, main > .hint, main > #photos, main > .fld:has(textarea), main > .fld:has(.stat), main > .fld:has(.three), main > .fld:has([data-k=notes]), main > .fld:has([data-k=follow]) { grid-column:1 / -1; }
+    .sect { font-size:13px; margin-top:32px; }
+    label, .lbl, .pblock .ph2 { font-size:14px; }
+    .stat .chip { font-size:16px; padding:9px 18px; }
+    #photos { display:grid; grid-template-columns:repeat(3, 1fr); column-gap:24px; }
+    .thumb { width:110px; height:110px; }
+    #bar { justify-content:center; } #bar button { flex:0 1 200px; } #bar #bSave { flex:0 1 320px; }
+    dialog.sheet[open] { left:50%; transform:translateX(-50%); max-width:760px; }
+    dialog { max-width:620px; }
+  }
+  @media (min-width:1300px) { #photos { grid-template-columns:repeat(6, 1fr); } }
+  @media (prefers-color-scheme: dark) { #editBar { background:#3a2a12; color:#ffd8a8; } }
+</style>
+</head>
+<body>
+<header id="hdr">
+  <div id="ttl"><b id="jobTitle">Damper form</b><span id="net">Online</span></div>
+  <button type="button" id="bMap" hidden>🗺 Map</button>
+  <button type="button" id="bSaved">Saved <span id="savedN">0</span></button>
+  <button type="button" id="bSettings" aria-label="Settings">⚙</button>
+</header>
+
+<div id="dHead"><div id="dTitle" class="ph">New entry</div><span id="dStat"></span></div>
+<main>
+  <div id="editBar" hidden><span id="editText"></span><button type="button" class="secondary small" id="bCancelEdit">Stop editing</button></div>
+
+  <div class="sect">Inspector</div>
+  <div class="fld"><label for="fTech" class="req">Tech name</label><input id="fTech" autocomplete="name" placeholder="Your name"></div>
+  <div class="fld"><label for="fDate" class="req">Inspection date</label><input id="fDate" type="date"></div>
+
+  <div class="sect">Damper</div>
+  <div class="fld"><span class="lbl req">Damper</span><div class="dbox" id="fDamper" tabindex="0"></div></div>
+  <div class="fld"><label for="fRoom">Room / Location <span style="font-weight:400">(filled in from the damper, edit if needed)</span></label><textarea id="fRoom" style="min-height:60px" placeholder="Room / location"></textarea></div>
+
+  <div class="sect">Inspection result</div>
+  <div class="fld"><span class="lbl req">Status</span><div class="stat" id="fStatus"></div></div>
+
+  <div class="sect">During inspection</div>
+  <div class="fld"><span class="lbl">Damper Type</span><div class="pillbox" data-k="type"></div></div>
+  <div class="fld"><span class="lbl">Mechanism</span><div class="pillbox" data-k="mech"></div></div>
+  <div class="fld"><span class="lbl">Damper Size</span>
+    <div class="three">
+      <div><small>Length</small><input id="fLen" inputmode="decimal" placeholder="Length"></div>
+      <div><small>Width</small><input id="fWid" inputmode="decimal" placeholder="Width"></div>
+      <div><small>Diameter</small><input id="fDia" inputmode="decimal" placeholder="Diameter"></div>
+    </div></div>
+  <div class="fld"><span class="lbl">Access Door Size</span><div class="pillbox" data-k="door"></div></div>
+  <div class="fld"><span class="lbl">AHU #</span><div class="pillbox" data-k="ahu"></div></div>
+  <div class="fld"><span class="lbl">Special Conditions - Inspection</span><div class="pillbox" data-k="cond"></div></div>
+  <div class="fld"><span class="lbl">Inspection Notes</span><div class="pillbox" data-k="notes"></div></div>
+  <div class="fld"><span class="lbl">Suggested Follow-up</span><div class="pillbox" data-k="follow"></div></div>
+
+  <div class="sect">Pictures</div>
+  <div id="photos"></div>
+
+  <div class="sect">Notes</div>
+  <div class="fld"><label for="fRepair">Suggested Repair Notes</label><textarea id="fRepair" placeholder="Details about the suggested repairs"></textarea></div>
+  <div class="fld"><label for="fField">Inspection Field Notes</label><textarea id="fField" placeholder="Anything the office or client should know"></textarea></div>
+  <p class="hint">Everything on this page saves on this phone as you type. Tap <b>Save</b> to log it as one visit. Every save is its own dated row, so a damper done on two different days shows up twice.</p>
+  <p class="hint" id="ver"></p>
+</main>
+
+<div id="bar">
+  <button type="button" id="bClear">Clear</button>
+  <button type="button" id="bSave">Save</button>
+  <button type="button" id="bExport">Export</button>
+</div>
+
+<dialog id="picker" class="sheet">
+  <div class="pkhead"><h2 id="pkTitle"></h2><button type="button" id="pkDone">Done</button></div>
+  <div id="pkFilters"><select id="pkBld" aria-label="Building"></select><select id="pkFlr" aria-label="Floor"></select></div>
+  <input id="pkSearch" type="search" placeholder="Find option" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <div id="pkList"></div>
+</dialog>
+
+<dialog id="savedDlg" class="sheet">
+  <div class="pkhead"><h2>Saved visits</h2><button type="button" id="svClose">Done</button></div>
+  <div id="svList" style="flex:1 1 auto;min-height:0;overflow-y:auto"></div>
+</dialog>
+
+<dialog id="mapDlg" class="sheet">
+  <div class="pkhead"><h2>Job maps</h2><button type="button" id="mapClose">Done</button></div>
+  <p class="hint" id="mapHint" style="margin:0 0 6px"></p>
+  <div id="mapList" style="flex:1 1 auto;min-height:0;overflow-y:auto"></div>
+  <button type="button" class="secondary small" id="mapRefresh" style="margin-top:10px">↻ Check for a newer map</button>
+</dialog>
+
+<dialog id="entryDlg">
+  <h2 id="enTitle" style="margin:0 0 4px;font-size:18px"></h2>
+  <p class="hint" id="enSub" style="margin:0"></p>
+  <button type="button" class="opt" id="enEdit">Open and edit</button>
+  <button type="button" class="opt secondary" id="enAgain">Start a new visit for this damper<small>Keeps the old one as it is</small></button>
+  <button type="button" class="opt secondary" id="enDel" style="color:#b42318;border-color:#b42318">Delete this visit</button>
+  <button type="button" class="opt secondary" id="enClose" style="border:0">Close</button>
+</dialog>
+
+<dialog id="exportDlg">
+  <h2 style="margin:0 0 4px;font-size:18px">Export</h2>
+  <p class="hint" style="margin:0">Makes a spreadsheet (one row per visit) plus the photos in one .zip file, then opens the share menu so you can email it or save it to Files.</p>
+  <label for="exWhich">Which visits</label>
+  <select id="exWhich"></select>
+  <label style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" id="exPics" checked style="width:auto"> Include photos</label>
+  <div class="dlgbtns"><button type="button" class="secondary" id="exCancel">Cancel</button><button type="button" id="exGo">Export</button></div>
+  <p class="hint" id="exMsg"></p>
+</dialog>
+
+<dialog id="setDlg">
+  <h2 style="margin:0 0 4px;font-size:18px">Settings</h2>
+  <p class="hint" style="margin:0">The damper list comes from Airtable. This page only reads it and never changes anything there.</p>
+  <label for="sTok">Airtable personal access token</label>
+  <input id="sTok" type="password" autocomplete="off" placeholder="pat…">
+  <p class="hint" id="sTokHint"></p>
+  <label for="sJob">Job</label>
+  <select id="sJob"><option value="">Load jobs first</option></select>
+  <div class="dlgbtns"><button type="button" class="secondary" id="sLoadJobs">Load jobs</button><button type="button" id="sLoad">Download dampers</button></div>
+  <p class="hint" id="sMsg"></p>
+  <div class="dlgbtns"><button type="button" class="secondary" id="sClose">Close</button></div>
+</dialog>
+
+<dialog id="viewer" style="padding:0;border:0;background:transparent;max-width:100vw;width:100vw;height:100dvh">
+  <img id="vImg" alt="" style="width:100%;height:100%;object-fit:contain">
+</dialog>
+
+<div id="toast" hidden></div>
+
+<script>
+const APP_VERSION = '2026-11-02-c (simple)';
+const $ = (id) => document.getElementById(id);
+const P = 'simple:'; // keeps its own saved data apart from the main tool and the test copy
+const ls = {
+  get(k, d) { try { const v = localStorage.getItem(P + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(P + k, JSON.stringify(v)); return true; } catch { toast('Phone storage is full'); return false; } },
+};
+const esc = (s) => String(s == null ? '' : s);
+const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const fmtDay = (d) => { if (!d) return ''; const [y, m, dd] = d.split('-').map(Number); return new Date(y, m - 1, dd).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }); };
+const fmtTime = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+let toastT;
+function toast(m) { const t = $('toast'); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2600); }
+
+/* ---------- Choices ----------
+   Built-in lists (from the Damper Survey table), replaced by the job's own lists when you download dampers. */
+const AT_COLORS = {
+  blueLight2:'#cfdfff', cyanLight2:'#d0f0fd', tealLight2:'#c2f5e9', greenLight2:'#d1f7c4', yellowLight2:'#ffeab6', orangeLight2:'#fee2d5', redLight2:'#ffdce5', pinkLight2:'#ffdaf6', purpleLight2:'#ede2fe', grayLight2:'#eeeeee',
+  blueLight1:'#9cc7ff', cyanLight1:'#77d1f3', tealLight1:'#72ddc3', greenLight1:'#93e088', yellowLight1:'#ffd66e', orangeLight1:'#ffa981', redLight1:'#ff9eb7', pinkLight1:'#f99de2', purpleLight1:'#cdb0ff', grayLight1:'#cccccc',
+  blueBright:'#2d7ff9', cyanBright:'#18bfff', tealBright:'#20d9d2', greenBright:'#20c933', yellowBright:'#fcb400', orangeBright:'#ff6f2c', redBright:'#f82b60', pinkBright:'#ff08c2', purpleBright:'#8b46ff', grayBright:'#666666',
+  blueDark1:'#2750ae', cyanDark1:'#0b76b7', tealDark1:'#06a09b', greenDark1:'#338a17', yellowDark1:'#b87503', orangeDark1:'#d74d26', redDark1:'#ba1e45', pinkDark1:'#b2158b', purpleDark1:'#6b1cb0', grayDark1:'#444444',
+};
+const STATUS_HIDE = /^(Accidental Entry Delete|Archived|Under Review)$/i; // office-only results, not offered to techs
+const BUILTIN = {
+  status: [['Pass','greenLight1'],['Pass - See Notes','greenLight2'],['Fail','redLight1'],['No Access','yellowLight1'],['No Access Door','yellowLight1'],['No Access Granted','yellowLight1'],['No Access-Ceiling/Panel','yellowLight1'],['No Access-Blocked by Utilities','yellowLight1'],['Missing Damper','cyanLight1'],['Client to Schedule','orangeLight1'],['Client to Schedule/Occupied','orangeLight1'],['Client to Shutdown AH','orangeLight1'],['Client to Schedule/Security','orangeLight1'],['Under Construction','orangeLight1'],['Decommissioned','grayLight1'],['Remove from Inventory','grayDark1'],['Comeback Required','purpleLight1'],['Does Not Exist','purpleLight1']],
+  mech: [['Fusible Link'],['Fusible Link w/ Spring'],['Pneumatic Actuator'],['Pneumatic Actuator with EFL & EP Switch'],['24V Electric Actuator'],['120V Electric Actuator'],['120V Electric Actuator w/ Fire Alarm'],['230V Electric Actuator'],['N/A']],
+  door: [['6"x6"','tealBright'],['8"x8"','tealLight2'],['10"x10"','tealLight2'],['12"x12"','greenLight2'],['14"x14"','yellowLight2'],['16"x16"','orangeLight2'],['18"x18"','redLight2'],['Custom Size (Notes)','pinkLight2'],['5” - 6” Diameter','blueLight2'],['7” - 9” Diameter','cyanLight2'],['10” - 11” Diameter','tealLight2'],['12” - 14” Diameter','greenLight2'],['15” - 16” Diameter','yellowLight2'],['17” - 18” Diameter','orangeLight2'],['19” - 20” Diameter','redLight2']],
+  cond: [['HEPA Cart','cyanLight2'],['ZIP Wall','tealLight2'],['OFF Hours','greenLight2'],['Locked - off the master key','yellowLight2'],['Materials','purpleLight1'],['Pneumatic','redLight2'],['Physical Access Limited','pinkLight2'],['Room Occupied','yellowLight1'],['Client - Electric Connection / FA','grayLight2'],['Containment Cube','greenLight2'],['Extension Ladder','yellowBright'],['Helper','greenBright'],['Powered Lift / Scaffolding','blueLight2'],['AHU Shutdown','blueLight2'],['Stainless Steel Duct','grayDark1'],['Psych Ward','pinkBright'],['Patient Room','orangeLight2'],['Round Duct','orangeBright'],['Difficult Site Conditions','pinkLight1'],['Screwed & Sealed Sheetmetal Access','cyanDark1'],['Bolted Access Door','purpleLight2'],['OR Suite','redDark1'],['EXCLUDED','grayLight1']],
+  ahu: [], type: [], notes: [], follow: [],
+};
+const PICK = { // the pick-list fields: title, one or many, can type a new value
+  type:   { t: 'Damper Type', multi: false, free: true },
+  mech:   { t: 'Mechanism', multi: false, free: true },
+  door:   { t: 'Access Door Size', multi: false, free: true },
+  ahu:    { t: 'AHU #', multi: false, free: true },
+  cond:   { t: 'Special Conditions - Inspection', multi: true, free: false },
+  notes:  { t: 'Inspection Notes', multi: true, free: true },
+  follow: { t: 'Suggested Follow-up', multi: true, free: true },
+};
+const PHOTOS = [['loc', 'Location'], ['act', 'Additional (Actuator)'], ['open', 'Damper Open'], ['closed', 'Damper Closed'], ['zoom', 'Zoom-Out Duct'], ['tag', 'ID Tag (Ceiling)']];
+const job = () => ls.get('job', null); // { base, name, at, dampers:[...], choices:{...} }
+const choices = (k) => { const j = job(); const c = j && j.choices && j.choices[k]; return c && c.length ? c : BUILTIN[k]; };
+const colorOf = (k, v) => { const hit = (choices(k) || []).find((x) => x[0] === v); return hit && hit[1]; };
+const PALETTE = ['#cfdfff', '#ede2fe', '#fee2d5', '#c2f5e9', '#ffeab6', '#ffdaf6', '#d1f7c4', '#eeeeee'];
+function chip(v, k) {
+  const c = document.createElement('span'); c.className = 'chip'; c.textContent = v;
+  const at = k && colorOf(k, v);
+  if (at && AT_COLORS[at]) { c.style.background = AT_COLORS[at]; if (/Bright|Dark1/.test(at)) c.style.color = '#fff'; }
+  else { let h = 0; for (const ch of String(v)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; c.style.background = PALETTE[h % PALETTE.length]; }
+  return c;
+}
+
+/* ---------- Photos (kept in the phone's database until deleted) ---------- */
+let dbp;
+const db = () => dbp || (dbp = new Promise((res, rej) => { const r = indexedDB.open('simple', 1); r.onupgradeneeded = () => r.result.createObjectStore('photos'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
+const idb = async (mode, fn) => { const d = await db(); return new Promise((res, rej) => { const tx = d.transaction('photos', mode); const st = tx.objectStore('photos'); const out = fn(st); tx.oncomplete = () => res(out && out.result); tx.onerror = () => rej(tx.error); }); };
+const putPhoto = (k, blob) => idb('readwrite', (s) => s.put(blob, k));
+const getPhoto = (k) => idb('readonly', (s) => s.get(k));
+const delPhoto = (k) => idb('readwrite', (s) => s.delete(k));
+async function shrink(file) {
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const m = 1600, s = Math.min(1, m / Math.max(bmp.width, bmp.height));
+    const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * s); cv.height = Math.round(bmp.height * s);
+    cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+    return await new Promise((r) => cv.toBlob((b) => r(b || file), 'image/jpeg', 0.8));
+  } catch { return file; }
+}
+const urls = new Map();
+async function thumbUrl(k) { if (urls.has(k)) return urls.get(k); const b = await getPhoto(k); if (!b) return ''; const u = URL.createObjectURL(b); urls.set(k, u); return u; }
+
+/* ---------- The form ---------- */
+const blank = () => ({ tech: ls.get('tech', ''), date: today(), damper: null, room: '', status: '', type: '', mech: '', len: '', wid: '', dia: '', door: '', ahu: '', cond: [], notes: [], follow: [], repair: '', field: '', photos: {} });
+let F = ls.get('draft', null) || blank();
+let editing = ls.get('editing', null); // id of a saved visit being changed
+const saveDraft = () => { ls.set('draft', F); ls.set('editing', editing); };
+const TXT = { fTech: 'tech', fDate: 'date', fRoom: 'room', fLen: 'len', fWid: 'wid', fDia: 'dia', fRepair: 'repair', fField: 'field' };
+for (const [id, k] of Object.entries(TXT)) $(id).addEventListener('input', () => { F[k] = $(id).value; if (k === 'tech') ls.set('tech', F.tech); saveDraft(); });
+
+function render() {
+  for (const [id, k] of Object.entries(TXT)) if ($(id).value !== (F[k] || '')) $(id).value = F[k] || '';
+  // title like the damper page: the damper ID, with its status oval beside it
+  const t = $('dTitle'); t.textContent = F.damper ? F.damper.id : 'New entry'; t.classList.toggle('ph', !F.damper);
+  const ds = $('dStat'); ds.textContent = ''; if (F.status) ds.append(chip(F.status, 'status'));
+  const d = $('fDamper'); d.textContent = '';
+  if (F.damper) {
+    const b = document.createElement('b'); b.textContent = F.damper.id; d.append(b);
+    const s = document.createElement('span'); s.textContent = [F.damper.bld, F.damper.flr && 'Floor ' + F.damper.flr, F.damper.type].filter(Boolean).join(' · ') || (F.damper.isNew ? 'Not in the damper list' : ''); d.append(s);
+  } else { const s = document.createElement('span'); s.className = 'ph'; s.textContent = 'Search or scroll the damper list'; d.append(s); }
+  // status ovals
+  const st = $('fStatus'); st.textContent = '';
+  for (const [v] of choices('status')) {
+    const b = document.createElement('button'); b.type = 'button'; const c = chip(v, 'status'); b.append(c);
+    if (F.status === v) { b.className = 'on'; const k = document.createElement('span'); k.className = 'ckc'; k.textContent = '✓'; c.append(k); }
+    b.onclick = () => { F.status = F.status === v ? '' : v; saveDraft(); render(); };
+    st.append(b);
+  }
+  document.querySelectorAll('.pillbox').forEach((box) => {
+    const k = box.dataset.k, cfg = PICK[k], vals = cfg.multi ? F[k] || [] : F[k] ? [F[k]] : [];
+    box.textContent = '';
+    if (!vals.length) { const s = document.createElement('span'); s.className = 'ph'; s.textContent = cfg.multi ? 'Choose one or more…' : 'Choose…'; box.append(s); }
+    vals.forEach((v) => {
+      const c = chip(v, k); const x = document.createElement('span'); x.className = 'x'; x.textContent = '×';
+      x.onclick = (e) => { e.stopPropagation(); if (cfg.multi) F[k] = F[k].filter((y) => y !== v); else F[k] = ''; saveDraft(); render(); };
+      c.append(x); box.append(c);
+    });
+    box.onclick = () => openPick(k);
+  });
+  renderPhotos();
+  const eb = $('editBar'), all = ls.get('entries', []), en = editing && all.find((e) => e.id === editing);
+  eb.hidden = !en; if (en) $('editText').textContent = 'Editing the saved visit from ' + fmtDay(en.date) + '. Save updates that visit.';
+  $('bSave').textContent = en ? 'Save changes' : 'Save';
+  $('savedN').textContent = all.length;
+}
+
+async function renderPhotos() {
+  const box = $('photos');
+  if (!box.children.length) {
+    for (const [k, t] of PHOTOS) {
+      const d = document.createElement('div'); d.className = 'pblock fld';
+      d.innerHTML = `<div class="ph2"></div><div class="pbtns"><label>📷 Take photo<input type="file" accept="image/*" capture="environment"></label><label>🖼 Choose<input type="file" accept="image/*" multiple></label></div><div class="thumbs"></div>`;
+      d.querySelector('.ph2').textContent = t;
+      d.querySelectorAll('input').forEach((inp) => inp.onchange = async () => {
+        const files = [...inp.files]; inp.value = '';
+        for (const f of files) {
+          const key = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+          try { await putPhoto(key, await shrink(f)); } catch { toast('Could not save the photo (phone storage full?)'); continue; }
+          (F.photos[k] = F.photos[k] || []).push(key);
+        }
+        saveDraft(); renderPhotos();
+      });
+      d.dataset.k = k; box.append(d);
+    }
+  }
+  for (const d of box.children) {
+    const k = d.dataset.k, th = d.querySelector('.thumbs'), keys = F.photos[k] || [];
+    th.textContent = '';
+    for (const key of keys) {
+      const w = document.createElement('div'); w.className = 'thumb';
+      const img = document.createElement('img'); img.alt = ''; img.src = await thumbUrl(key);
+      img.onclick = () => { $('vImg').src = img.src; $('viewer').showModal(); };
+      const x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.setAttribute('aria-label', 'Remove photo');
+      x.onclick = () => { F.photos[k] = (F.photos[k] || []).filter((y) => y !== key); saveDraft(); cleanupPhotos(); renderPhotos(); };
+      w.append(img, x); th.append(w);
+    }
+  }
+}
+$('viewer').onclick = () => $('viewer').close();
+// delete stored photos that no visit and no draft uses any more
+async function cleanupPhotos() {
+  const used = new Set();
+  const add = (o) => Object.values((o && o.photos) || {}).forEach((a) => a.forEach((k) => used.add(k)));
+  add(F); ls.get('entries', []).forEach(add);
+  try { const keys = await idb('readonly', (s) => s.getAllKeys()); for (const k of keys || []) if (!used.has(k) && !String(k).startsWith('map:')) { await delPhoto(k); urls.delete(k); } } catch {}
+}
+
+/* ---------- Pick lists (sheet from the bottom, like the Airtable app) ---------- */
+function openPick(k) {
+  const cfg = PICK[k], dlg = $('picker'), list = $('pkList'), search = $('pkSearch');
+  dlg.classList.remove('tall'); $('pkFilters').hidden = true; list.classList.add('flow');
+  $('pkTitle').textContent = cfg.t; search.value = ''; search.placeholder = 'Find option';
+  const draw = () => {
+    const q = search.value.trim().toLowerCase(), all = (choices(k) || []).map((x) => x[0]);
+    const sel = cfg.multi ? F[k] || [] : F[k] ? [F[k]] : [];
+    list.textContent = '';
+    if (!cfg.multi && F[k] && !q) { const b = document.createElement('button'); b.type = 'button'; b.className = 'pkclear'; b.textContent = 'Clear'; b.onclick = () => { F[k] = ''; saveDraft(); render(); dlg.close(); }; list.append(b); }
+    const hits = all.filter((v) => !q || v.toLowerCase().includes(q));
+    for (const v of [...sel.filter((v) => !all.includes(v)), ...hits]) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'pkpill'; const c = chip(v, k); b.append(c);
+      if (sel.includes(v)) { const m = document.createElement('span'); m.className = 'ckc'; m.textContent = '✓'; c.append(m); }
+      b.onclick = () => {
+        if (cfg.multi) { F[k] = sel.includes(v) ? sel.filter((x) => x !== v) : [...sel, v]; saveDraft(); render(); draw(); }
+        else { F[k] = v; saveDraft(); render(); dlg.close(); }
+      };
+      list.append(b);
+    }
+    const typed = search.value.trim();
+    if (cfg.free && typed && !all.some((v) => v.toLowerCase() === typed.toLowerCase())) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'pkclear pknew'; b.textContent = '+ Use "' + typed + '"';
+      b.onclick = () => { if (cfg.multi) { if (!sel.includes(typed)) F[k] = [...sel, typed]; } else F[k] = typed; search.value = ''; saveDraft(); render(); cfg.multi ? draw() : dlg.close(); };
+      list.append(b);
+    }
+    if (!list.children.length) list.textContent = all.length ? 'No matches' : 'No list yet. Type a value above, or download this job in Settings.';
+  };
+  search.oninput = draw; draw();
+  $('pkDone').onclick = () => dlg.close();
+  dlg.showModal();
+}
+
+/* ---------- Damper list ---------- */
+const floorSort = (a, b) => (parseFloat(a) - parseFloat(b)) || String(a).localeCompare(String(b), undefined, { numeric: true });
+function openDamperPick() {
+  const j = job(), all = (j && j.dampers) || [], dlg = $('picker'), list = $('pkList'), search = $('pkSearch'), bS = $('pkBld'), fS = $('pkFlr');
+  dlg.classList.add('tall'); list.classList.remove('flow');
+  $('pkTitle').textContent = all.length ? 'Damper (' + all.length + ')' : 'Damper';
+  search.value = ''; search.placeholder = 'e.g. SD-1-012';
+  const bl = [...new Set(all.map((d) => d.bld).filter(Boolean))].sort();
+  const fill = (el, first, vals, fmt) => { const keep = el.value; el.textContent = ''; [['', first], ...vals.map((v) => [v, fmt ? fmt(v) : v])].forEach(([v, t]) => el.append(new Option(t, v))); if (vals.includes(keep)) el.value = keep; };
+  const remember = ls.get('filt', {});
+  fill(bS, 'All buildings', bl); if (bl.includes(remember.b)) bS.value = remember.b;
+  const fillF = () => { const fl = [...new Set(all.filter((d) => !bS.value || d.bld === bS.value).map((d) => d.flr).filter(Boolean))].sort(floorSort); fill(fS, 'All floors', fl, (v) => 'Floor ' + v); if (fl.includes(remember.f)) fS.value = remember.f; };
+  fillF();
+  $('pkFilters').hidden = all.length < 2;
+  bS.onchange = () => { remember.b = bS.value; remember.f = ''; ls.set('filt', remember); fillF(); fS.value = ''; draw(); };
+  fS.onchange = () => { remember.f = fS.value; ls.set('filt', remember); draw(); };
+  const doneToday = new Set(ls.get('entries', []).filter((e) => e.date === today()).map((e) => e.damper && e.damper.id));
+  const draw = () => {
+    const q = search.value.trim().toLowerCase();
+    const hits = all.filter((d) => (!bS.value || d.bld === bS.value) && (!fS.value || d.flr === fS.value) && (!q || (d.id + ' ' + d.room + ' ' + d.type).toLowerCase().includes(q)));
+    list.textContent = '';
+    const typed = search.value.trim();
+    if (typed && !all.some((d) => d.id.toLowerCase() === typed.toLowerCase())) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'pkitem pknew'; b.textContent = '+ Use "' + typed + '" (not in the list)';
+      b.onclick = () => { F.damper = { id: typed, isNew: true, bld: bS.value, flr: fS.value }; saveDraft(); render(); dlg.close(); };
+      list.append(b);
+    }
+    for (const d of hits.slice(0, 400)) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'pkitem';
+      if (doneToday.has(d.id)) { const l = document.createElement('span'); l.className = 'last'; l.textContent = '✓ done today'; l.style.color = 'var(--ok)'; b.append(l); }
+      else if (d.last) { const l = document.createElement('span'); l.className = 'last'; l.textContent = d.last; b.append(l); }
+      b.append(document.createTextNode(d.id + (d.type ? ' — ' + d.type : '')));
+      if (d.room || d.bld) { const s = document.createElement('small'); s.textContent = [d.room, d.bld, d.flr && 'Floor ' + d.flr].filter(Boolean).join(' · '); b.append(s); }
+      b.onclick = () => pickDamper(d);
+      list.append(b);
+    }
+    if (hits.length > 400) { const p = document.createElement('p'); p.className = 'hint'; p.textContent = 'Showing 400 of ' + hits.length + '. Search or filter to narrow it down.'; list.append(p); }
+    if (!list.children.length) list.textContent = all.length ? 'No matches' : 'No damper list yet. Type the damper ID above, or download this job in Settings.';
+  };
+  search.oninput = draw; draw();
+  $('pkDone').onclick = () => dlg.close();
+  dlg.showModal();
+}
+function pickDamper(d) {
+  F.damper = { id: d.id, rec: d.rec, bld: d.bld, flr: d.flr, type: d.type };
+  // fill blanks from the damper list (the tech can still change them)
+  if (!F.room) F.room = d.room || '';
+  if (!F.type && d.type) F.type = d.type;
+  if (!F.ahu && d.ahu) F.ahu = d.ahu;
+  if (!F.mech && d.mech) F.mech = d.mech;
+  saveDraft(); render(); $('picker').close();
+}
+$('fDamper').onclick = openDamperPick;
+$('fDamper').onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDamperPick(); } };
+
+/* ---------- Save, clear, saved list ---------- */
+$('bSave').onclick = () => {
+  const miss = [];
+  if (!F.tech.trim()) miss.push('Tech name'); if (!F.date) miss.push('Inspection date'); if (!F.damper) miss.push('Damper'); if (!F.status) miss.push('Status');
+  if (miss.length) { toast('Still needed: ' + miss.join(', ')); return; }
+  const all = ls.get('entries', []), j = job();
+  if (editing && all.some((e) => e.id === editing)) {
+    const i = all.findIndex((e) => e.id === editing);
+    all[i] = { ...all[i], ...F, editedAt: Date.now(), exportedAt: null };
+    if (!ls.set('entries', all)) return;
+    toast('Changes saved');
+  } else {
+    all.push({ ...F, id: 'v' + Date.now().toString(36), savedAt: Date.now(), job: j ? j.name : '', base: j ? j.base : '' });
+    if (!ls.set('entries', all)) return;
+    toast('Saved ✓ ' + F.damper.id);
+  }
+  editing = null; F = { ...blank(), tech: F.tech, date: F.date }; saveDraft(); render(); window.scrollTo(0, 0);
+};
+$('bClear').onclick = () => {
+  if (!confirm(editing ? 'Stop editing? Changes you have not saved are dropped.' : 'Clear this form? Saved visits are not touched.')) return;
+  editing = null; F = { ...blank(), tech: F.tech, date: F.date }; saveDraft(); cleanupPhotos(); render(); window.scrollTo(0, 0);
+};
+$('bCancelEdit').onclick = $('bClear').onclick;
+
+function renderSaved() {
+  const all = ls.get('entries', []), box = $('svList'); box.textContent = '';
+  if (!all.length) { box.innerHTML = '<p class="hint">Nothing saved yet.</p>'; return; }
+  const days = {};
+  for (const e of all) (days[e.date] = days[e.date] || []).push(e);
+  for (const day of Object.keys(days).sort().reverse()) {
+    const h = document.createElement('div'); h.className = 'dayh'; h.textContent = fmtDay(day);
+    const n = document.createElement('span'); const list = days[day];
+    n.textContent = list.length + (list.length === 1 ? ' visit' : ' visits') + (list.every((e) => e.exportedAt) ? ' · exported' : ''); h.append(n); box.append(h);
+    for (const e of list.sort((a, b) => b.savedAt - a.savedAt)) {
+      const it = document.createElement('div'); it.className = 'item';
+      const t = document.createElement('div'); t.className = 't';
+      const b = document.createElement('b'); b.textContent = e.damper ? e.damper.id : '(no damper)';
+      const s = document.createElement('span'); s.textContent = [fmtTime(e.savedAt), e.tech, e.room].filter(Boolean).join(' · ');
+      t.append(b, s);
+      if (e.exportedAt) { const x = document.createElement('div'); x.className = 'exp'; x.textContent = 'Exported ' + new Date(e.exportedAt).toLocaleDateString(); t.append(x); }
+      it.append(t); if (e.status) it.append(chip(e.status, 'status'));
+      it.onclick = () => openEntry(e.id);
+      box.append(it);
+    }
+  }
+}
+$('bSaved').onclick = () => { renderSaved(); $('savedDlg').showModal(); };
+$('svClose').onclick = () => $('savedDlg').close();
+function openEntry(id) {
+  const e = ls.get('entries', []).find((x) => x.id === id); if (!e) return;
+  $('enTitle').textContent = e.damper ? e.damper.id : 'Visit';
+  $('enSub').textContent = [fmtDay(e.date), e.tech, e.status].filter(Boolean).join(' · ');
+  const dirty = () => (F.damper || F.status || F.room || F.field || F.repair || Object.values(F.photos).some((a) => a.length)) && !confirm('The form has an unsaved entry. Drop it?');
+  $('enEdit').onclick = () => { if (dirty()) return; editing = id; F = JSON.parse(JSON.stringify(e)); ['id', 'savedAt', 'editedAt', 'exportedAt', 'job', 'base'].forEach((k) => delete F[k]); saveDraft(); render(); $('entryDlg').close(); $('savedDlg').close(); window.scrollTo(0, 0); };
+  $('enAgain').onclick = () => { if (dirty()) return; editing = null; F = { ...blank(), tech: F.tech || e.tech, damper: e.damper, room: e.room, type: e.type, mech: e.mech, ahu: e.ahu, door: e.door, len: e.len, wid: e.wid, dia: e.dia }; saveDraft(); render(); $('entryDlg').close(); $('savedDlg').close(); window.scrollTo(0, 0); };
+  $('enDel').onclick = () => {
+    if (!confirm('Delete this visit and its photos from this phone?' + (e.exportedAt ? '' : ' It has NOT been exported yet.'))) return;
+    ls.set('entries', ls.get('entries', []).filter((x) => x.id !== id)); if (editing === id) { editing = null; saveDraft(); }
+    cleanupPhotos(); $('entryDlg').close(); renderSaved(); render();
+  };
+  $('enClose').onclick = () => $('entryDlg').close();
+  $('entryDlg').showModal();
+}
+
+/* ---------- Export: spreadsheet (one row per visit) + photos, in one .zip ---------- */
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = (u) => { let c = 0xffffffff; for (let i = 0; i < u.length; i++) c = CRC[(c ^ u[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+function makeZip(files) { // files: [{name, data:Uint8Array}] — stored, no compression (photos are already JPEG)
+  const enc = new TextEncoder(), parts = [], cen = []; let off = 0;
+  const d = new Date(), dt = ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)), dd = (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate());
+  for (const f of files) {
+    const nm = enc.encode(f.name), crc = crc32(f.data), h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true); h.setUint16(10, dt, true); h.setUint16(12, dd, true);
+    h.setUint32(14, crc, true); h.setUint32(18, f.data.length, true); h.setUint32(22, f.data.length, true); h.setUint16(26, nm.length, true); h.setUint16(28, 0, true);
+    parts.push(new Uint8Array(h.buffer), nm, f.data);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(10, 0, true); c.setUint16(12, dt, true); c.setUint16(14, dd, true);
+    c.setUint32(16, crc, true); c.setUint32(20, f.data.length, true); c.setUint32(24, f.data.length, true); c.setUint16(28, nm.length, true); c.setUint32(42, off, true);
+    cen.push(new Uint8Array(c.buffer), nm);
+    off += 30 + nm.length + f.data.length;
+  }
+  const csz = cen.reduce((a, b) => a + b.length, 0), e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, csz, true); e.setUint32(16, off, true);
+  return new Blob([...parts, ...cen, new Uint8Array(e.buffer)], { type: 'application/zip' });
+}
+const csvCell = (v) => { const s = Array.isArray(v) ? v.join('\n') : esc(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+const safe = (s) => esc(s).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'x';
+function exportChoices() {
+  const all = ls.get('entries', []), sel = $('exWhich'); sel.textContent = '';
+  const notExp = all.filter((e) => !e.exportedAt).length, td = all.filter((e) => e.date === today()).length;
+  sel.append(new Option('Not exported yet (' + notExp + ')', 'new'), new Option('Today (' + td + ')', 'today'));
+  for (const d of [...new Set(all.map((e) => e.date))].sort().reverse()) if (d !== today()) sel.append(new Option(fmtDay(d) + ' (' + all.filter((e) => e.date === d).length + ')', 'd:' + d));
+  sel.append(new Option('Everything saved (' + all.length + ')', 'all'));
+  sel.value = notExp ? 'new' : 'today';
+}
+$('bExport').onclick = () => { if (!ls.get('entries', []).length) { toast('Nothing saved yet'); return; } exportChoices(); $('exMsg').textContent = ''; $('exportDlg').showModal(); };
+$('exCancel').onclick = () => $('exportDlg').close();
+$('exGo').onclick = async () => {
+  const w = $('exWhich').value, all = ls.get('entries', []);
+  const pick = all.filter((e) => w === 'all' || (w === 'new' && !e.exportedAt) || (w === 'today' && e.date === today()) || (w.startsWith('d:') && e.date === w.slice(2)));
+  if (!pick.length) { $('exMsg').textContent = 'No visits in that choice.'; return; }
+  $('exGo').disabled = true; $('exMsg').textContent = 'Building the file…';
+  try {
+    pick.sort((a, b) => (a.date + a.savedAt).localeCompare(b.date + b.savedAt));
+    const pics = $('exPics').checked, files = [], cols = ['Visit #', 'Inspection Date', 'Saved At', 'Tech', 'Job', 'Building', 'Floor', 'Damper ID', 'Room/Location', 'Status', 'Damper Type', 'Mechanism', 'Length', 'Width', 'Diameter', 'Access Door Size', 'AHU #', 'Special Conditions - Inspection', 'Inspection Notes', 'Suggested Follow-up', 'Suggested Repair Notes', 'Inspection Field Notes', ...PHOTOS.map((p) => p[1] + ' photos'), 'Airtable Record ID', 'Edited After Save'];
+    const rows = [cols];
+    let n = 0;
+    for (const e of pick) {
+      n++;
+      const pcols = [];
+      for (const [k, t] of PHOTOS) {
+        const names = [];
+        if (pics) for (const [i, key] of (e.photos[k] || []).entries()) {
+          const b = await getPhoto(key); if (!b) continue;
+          const nm = `photos/${e.date}_${safe(e.damper && e.damper.id)}_${safe(t)}${i ? '_' + (i + 1) : ''}_${e.id}.jpg`;
+          files.push({ name: nm, data: new Uint8Array(await b.arrayBuffer()) }); names.push(nm);
+        } else if ((e.photos[k] || []).length) names.push((e.photos[k] || []).length + ' on phone');
+        pcols.push(names.join('\n'));
+      }
+      const dm = e.damper || {};
+      rows.push([n, e.date, new Date(e.savedAt).toLocaleString(), e.tech, e.job, dm.bld, dm.flr, dm.id, e.room, e.status, e.type, e.mech, e.len, e.wid, e.dia, e.door, e.ahu, e.cond, e.notes, e.follow, e.repair, e.field, ...pcols, dm.rec || (dm.isNew ? 'NEW - not in list' : ''), e.editedAt ? new Date(e.editedAt).toLocaleString() : '']);
+    }
+    const csv = '﻿' + rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
+    const j = job(), stamp = today() + '_' + String(new Date().getHours()).padStart(2, '0') + String(new Date().getMinutes()).padStart(2, '0');
+    const base = 'damper-visits_' + (j ? safe(j.name).slice(0, 24) + '_' : '') + stamp;
+    files.unshift({ name: base + '.csv', data: new TextEncoder().encode(csv) });
+    const file = pics && files.length > 1 ? new File([makeZip(files)], base + '.zip', { type: 'application/zip' }) : new File([csv], base + '.csv', { type: 'text/csv' });
+    let shared = false;
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: base }); shared = true; } catch (err) { if (err && err.name === 'AbortError') { $('exMsg').textContent = 'Export cancelled. Nothing was marked as exported.'; return; } }
+    }
+    if (!shared) { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000); }
+    const ids = new Set(pick.map((e) => e.id)), now = Date.now();
+    ls.set('entries', ls.get('entries', []).map((e) => (ids.has(e.id) ? { ...e, exportedAt: now } : e)));
+    $('exportDlg').close(); toast('Exported ' + pick.length + (pick.length === 1 ? ' visit' : ' visits')); render();
+  } catch (err) { $('exMsg').textContent = 'Export failed: ' + (err && err.message || err); }
+  finally { $('exGo').disabled = false; }
+};
+
+/* ---------- Settings: read the damper list from Airtable (read only) ---------- */
+const BASE_HIDE = /\bHR\b|receipt|training|payroll|personnel|🔒/i; // never shown
+const cfg = () => {
+  const c = ls.get('cfg', null); if (c) return c;
+  // first open: borrow the token from the main tool on this phone so it doesn't have to be typed again
+  let m = {}; try { m = JSON.parse(localStorage.getItem('cfg') || localStorage.getItem('beta:cfg') || '{}'); } catch {}
+  return { token: m.token || '', base: m.base || '' };
+};
+const H = () => ({ headers: { Authorization: 'Bearer ' + cfg().token } });
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+async function aget(url) {
+  for (let i = 0; i < 5; i++) {
+    await wait(220); // Airtable allows 5 requests a second
+    const r = await fetch(url, H());
+    if (r.status === 429) { await wait(1500); continue; }
+    if (!r.ok) throw new Error(r.status === 401 ? 'Airtable refused the token (401)' : r.status === 403 || r.status === 404 ? 'The token cannot see this job (' + r.status + ')' : 'Airtable error ' + r.status);
+    return r.json();
+  }
+  throw new Error('Airtable is busy, try again');
+}
+async function loadJobs() {
+  const c = { ...cfg(), token: $('sTok').value.trim() }; ls.set('cfg', c);
+  if (!c.token) { $('sMsg').textContent = 'Paste a token first.'; return; }
+  $('sMsg').textContent = 'Loading jobs…';
+  try {
+    const out = []; let off = '';
+    for (let i = 0; i < 30; i++) { const j = await aget('https://api.airtable.com/v0/meta/bases' + (off ? '?offset=' + encodeURIComponent(off) : '')); for (const b of j.bases || []) if (!BASE_HIDE.test(b.name)) out.push({ id: b.id, name: b.name }); if (!j.offset) break; off = j.offset; }
+    const jn = (n) => { const m = String(n).match(/^\s*(\d{3,6})/); return m ? +m[1] : -1; };
+    const damp = out.filter((b) => /damper/i.test(b.name)); const list = (damp.length ? damp : out).sort((a, b) => jn(b.name) - jn(a.name) || a.name.localeCompare(b.name));
+    ls.set('bases', list); fillJobs(); $('sMsg').textContent = list.length + ' jobs. Pick one and tap Download dampers.';
+  } catch (e) { $('sMsg').textContent = e.message; }
+}
+function fillJobs() {
+  const sel = $('sJob'), list = ls.get('bases', []), j = job(), c = cfg(); sel.textContent = '';
+  if (!list.length) sel.append(new Option(j ? j.name : 'Load jobs first', j ? j.base : ''));
+  for (const b of list) sel.append(new Option(b.name, b.id));
+  sel.value = (j && j.base) || c.base || (list[0] && list[0].id) || '';
+}
+const nk = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9#]+/g, '');
+async function loadDampers() {
+  const c = { ...cfg(), token: $('sTok').value.trim(), base: $('sJob').value }; ls.set('cfg', c);
+  if (!c.token || !c.base) { $('sMsg').textContent = 'Needs a token and a job.'; return; }
+  if (!navigator.onLine) { $('sMsg').textContent = 'Needs a connection.'; return; }
+  const name = ($('sJob').selectedOptions[0] || {}).text || c.base;
+  $('sLoad').disabled = true; $('sMsg').textContent = 'Reading the job…';
+  try {
+    const meta = await aget(`https://api.airtable.com/v0/meta/bases/${c.base}/tables`);
+    const tbl = meta.tables.find((t) => /^damper survey$/i.test(t.name.trim())) || meta.tables.find((t) => /damper survey/i.test(t.name));
+    if (!tbl) throw new Error('This job has no Damper Survey table');
+    const usable = tbl.fields.filter((f) => !/^🚫/.test(f.name));
+    const find = (re, types) => usable.find((f) => re.test(nk(f.name)) && (!types || types.includes(f.type)));
+    const F_ = {
+      id: tbl.fields.find((f) => f.id === tbl.primaryFieldId),
+      bld: find(/^building$/), flr: find(/^floor$/), room: find(/^roomlocation$/), type: find(/^dampertype$/),
+      ahu: find(/^ahu#?$/), mech: find(/^dampermechanism$/), last: find(/^operationaltest$/), door: find(/^access(duct)?doorsize$/),
+      cond: find(/specialconditionsinspections?$/), notes: find(/inspectionnoteselect/, ['multipleRecordLinks']), follow: find(/^suggestedfollowup$/, ['multipleRecordLinks']),
+    };
+    // choice lists
+    const ch = {};
+    const sel = (f) => (f && f.options && f.options.choices ? f.options.choices.map((x) => [x.name.trim(), x.color]) : null);
+    if (sel(F_.last)) ch.status = sel(F_.last).filter((x) => !STATUS_HIDE.test(x[0]));
+    for (const k of ['mech', 'door', 'cond', 'ahu']) { const s = sel(F_[k]); if (s) ch[k] = s.filter((x, i, a) => x[0] && a.findIndex((y) => y[0] === x[0]) === i); }
+    for (const k of ['type', 'notes', 'follow']) {
+      const f = F_[k]; if (!f || f.type !== 'multipleRecordLinks') continue;
+      const lt = meta.tables.find((t) => t.id === f.options.linkedTableId); if (!lt) continue;
+      $('sMsg').textContent = 'Reading the ' + PICK[k].t + ' list…';
+      const names = []; let off = '';
+      for (let i = 0; i < 20; i++) { const j = await aget(`https://api.airtable.com/v0/${c.base}/${lt.id}?pageSize=100&fields%5B%5D=${lt.primaryFieldId}&returnFieldsByFieldId=true${off ? '&offset=' + encodeURIComponent(off) : ''}`); for (const r of j.records) { const v = esc(r.fields[lt.primaryFieldId]).trim(); if (v && !names.includes(v)) names.push(v); } if (!j.offset) break; off = j.offset; }
+      ch[k] = names.map((v) => [v]);
+    }
+    // the dampers themselves, as text (linked building/floor come back as names)
+    const want = Object.entries(F_).filter(([k, f]) => f && ['id', 'bld', 'flr', 'room', 'type', 'ahu', 'mech', 'last'].includes(k));
+    const q = want.map(([, f]) => 'fields%5B%5D=' + f.id).join('&');
+    const dampers = []; let off = '';
+    for (let i = 0; i < 200; i++) {
+      $('sMsg').textContent = 'Downloading dampers… ' + dampers.length;
+      const j = await aget(`https://api.airtable.com/v0/${c.base}/${tbl.id}?pageSize=100&${q}&returnFieldsByFieldId=true&cellFormat=string&timeZone=America%2FNew_York&userLocale=en-us${off ? '&offset=' + encodeURIComponent(off) : ''}`);
+      for (const r of j.records) {
+        const g = (k) => (F_[k] ? esc(r.fields[F_[k].id]).trim() : '');
+        const id = g('id'); if (!id) continue;
+        const last = g('last'); if (/^(Accidental Entry Delete|Archived)$/i.test(last)) continue;
+        dampers.push({ rec: r.id, id, bld: g('bld'), flr: g('flr').replace(/^floor\s*/i, ''), room: g('room'), type: g('type'), ahu: g('ahu'), mech: g('mech'), last });
+      }
+      if (!j.offset) break; off = j.offset;
+    }
+    dampers.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+    if (!ls.set('job', { base: c.base, name, at: Date.now(), dampers, choices: ch })) throw new Error('Not enough room on this phone for the list');
+    $('sMsg').textContent = dampers.length + ' dampers saved. Getting the job map…';
+    showJob(); render();
+    const mm = await loadMaps(meta, (t) => ($('sMsg').textContent = t));
+    $('sMsg').textContent = dampers.length + ' dampers' + (mm ? ' and ' + mm + (mm === 1 ? ' map' : ' maps') : '') + ' saved on this phone. Works offline now.';
+  } catch (e) { $('sMsg').textContent = e.message || String(e); }
+  finally { $('sLoad').disabled = false; }
+}
+/* ---------- Job map: PDFs from the job's Drawing table, kept on this phone (read only) ---------- */
+const mapsOf = () => ls.get('maps', { base: '', at: 0, list: [] });
+async function loadMaps(meta, say) {
+  const c = cfg(), j = job(); if (!j || !c.token) return 0;
+  say = say || (() => {});
+  if (!meta) meta = await aget(`https://api.airtable.com/v0/meta/bases/${c.base}/tables`);
+  const t = meta.tables.find((x) => /^drawings?$/i.test(x.name.trim())) || meta.tables.find((x) => /drawing/i.test(x.name));
+  const old = mapsOf(), keep = old.base === c.base ? old.list : [];
+  if (!t) { ls.set('maps', { base: c.base, at: Date.now(), list: [] }); renderMapBtn(); return 0; }
+  const v = (t.views || []).find((x) => /^grid view$/i.test(x.name.trim()));
+  const attF = t.fields.filter((f) => f.type === 'multipleAttachments');
+  const revF = t.fields.find((f) => /revision/i.test(f.name) && /date/i.test(f.type));
+  const list = []; let off = '';
+  for (let i = 0; i < 10; i++) {
+    const r = await aget(`https://api.airtable.com/v0/${c.base}/${t.id}?pageSize=100&returnFieldsByFieldId=true${v ? '&view=' + encodeURIComponent(v.id) : ''}${off ? '&offset=' + encodeURIComponent(off) : ''}`);
+    for (const rec of r.records) for (const f of attF) for (const a of rec.fields[f.id] || []) {
+      if (!/pdf/i.test(a.type || '') && !/\.pdf$/i.test(a.filename || '')) continue;
+      list.push({ id: a.id, name: esc(rec.fields[t.primaryFieldId]).trim(), field: f.name, filename: a.filename || 'map.pdf', size: a.size || 0, rev: revF ? esc(rec.fields[revF.id]) : '', url: a.url });
+    }
+    if (!r.offset) break; off = r.offset;
+  }
+  // download each PDF once; a changed map comes with a new attachment id
+  let n = 0;
+  for (const m of list) {
+    n++;
+    const had = keep.find((k) => k.id === m.id && k.saved);
+    if (had) { m.saved = true; continue; }
+    say('Downloading map ' + n + ' of ' + list.length + '…');
+    try { const r = await fetch(m.url); if (!r.ok) throw new Error(r.status); await putPhoto('map:' + m.id, await r.blob()); m.saved = true; }
+    catch { m.saved = false; }
+  }
+  for (const k of keep) if (!list.some((m) => m.id === k.id)) { try { await delPhoto('map:' + k.id); } catch {} }
+  if (old.base && old.base !== c.base) for (const k of old.list) { try { await delPhoto('map:' + k.id); } catch {} }
+  ls.set('maps', { base: c.base, at: Date.now(), list: list.map(({ url, ...m }) => m) });
+  renderMapBtn();
+  return list.filter((m) => m.saved).length;
+}
+function renderMapBtn() { const m = mapsOf(), j = job(); $('bMap').hidden = !(j && m.base === j.base && m.list.length); }
+async function mapFile(m) { const b = await getPhoto('map:' + m.id); return b ? new File([b], m.filename, { type: 'application/pdf' }) : null; }
+function renderMaps() {
+  const m = mapsOf(), box = $('mapList'); box.textContent = '';
+  $('mapHint').textContent = m.at ? 'Saved on this phone, so it opens without signal. Last checked ' + new Date(m.at).toLocaleString() + '.' : '';
+  for (const it of m.list) {
+    const d = document.createElement('div'); d.className = 'mapi';
+    const b = document.createElement('b'); b.textContent = it.filename;
+    const s = document.createElement('span'); s.textContent = [it.name, it.field, it.rev && 'Revised ' + it.rev, it.size && (it.size / 1e6).toFixed(1) + ' MB', it.saved ? '' : 'not downloaded yet'].filter(Boolean).join(' · ');
+    const mb = document.createElement('div'); mb.className = 'mb';
+    const o = document.createElement('button'); o.type = 'button'; o.textContent = 'Open';
+    const sv = document.createElement('button'); sv.type = 'button'; sv.className = 'secondary'; sv.textContent = 'Save to Files';
+    o.onclick = async () => {
+      const f = await mapFile(it); if (!f) { toast('Not on this phone yet. Tap Check for a newer map.'); return; }
+      const u = URL.createObjectURL(f); const w = window.open(u, '_blank'); if (!w) location.href = u; setTimeout(() => URL.revokeObjectURL(u), 300000);
+    };
+    sv.onclick = async () => {
+      const f = await mapFile(it); if (!f) { toast('Not on this phone yet. Tap Check for a newer map.'); return; }
+      if (navigator.canShare && navigator.canShare({ files: [f] })) { try { await navigator.share({ files: [f] }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    };
+    mb.append(o, sv); d.append(b, s, mb); box.append(d);
+  }
+  if (!m.list.length) box.innerHTML = '<p class="hint">No map found in this job\'s Drawing table.</p>';
+}
+$('bMap').onclick = () => { renderMaps(); $('mapDlg').showModal(); };
+$('mapClose').onclick = () => $('mapDlg').close();
+$('mapRefresh').onclick = async () => {
+  if (!navigator.onLine) { toast('Needs a connection'); return; }
+  $('mapRefresh').disabled = true;
+  try { await loadMaps(null, (t) => ($('mapHint').textContent = t)); renderMaps(); toast('Map is up to date'); }
+  catch (e) { $('mapHint').textContent = e.message || String(e); }
+  finally { $('mapRefresh').disabled = false; }
+};
+// check for a newer map quietly when the page opens, at most every 6 hours
+function autoMaps() {
+  const m = mapsOf(), j = job();
+  if (!j || !cfg().token || !navigator.onLine) return;
+  if (m.base === j.base && Date.now() - m.at < 6 * 3600e3 && m.list.every((x) => x.saved)) return;
+  loadMaps().catch(() => {});
+}
+
+function showJob() {
+  const j = job();
+  $('jobTitle').textContent = j ? j.name : 'Damper form';
+  $('sTokHint').textContent = j ? 'Last download: ' + j.dampers.length + ' dampers, ' + new Date(j.at).toLocaleString() + '.' : 'Without a download you can still type damper IDs by hand.';
+}
+$('bSettings').onclick = () => { $('sTok').value = cfg().token || ''; fillJobs(); showJob(); $('sMsg').textContent = ''; $('setDlg').showModal(); };
+$('sLoadJobs').onclick = loadJobs;
+$('sLoad').onclick = loadDampers;
+$('sClose').onclick = () => $('setDlg').close();
+// tap outside a sheet to close it
+for (const d of document.querySelectorAll('dialog')) d.addEventListener('click', (e) => { if (e.target === d && d.id !== 'viewer') d.close(); });
+
+/* ---------- Online / offline ---------- */
+function net() { const on = navigator.onLine; $('hdr').classList.toggle('off', !on); $('net').textContent = on ? 'Online · simple form' : 'Offline · saving on this phone'; }
+addEventListener('online', net); addEventListener('offline', net);
+
+$('ver').textContent = 'Version ' + APP_VERSION;
+net(); showJob(); render(); renderMapBtn(); setTimeout(autoMaps, 1500);
+if (!job() && !ls.get('seenSetup', false)) { ls.set('seenSetup', true); setTimeout(() => $('bSettings').click(), 300); }
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
