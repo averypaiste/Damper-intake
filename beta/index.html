@@ -56,6 +56,11 @@
   .mknav select { max-width:45vw; padding:6px; border-radius:8px; }
   .mknav button { padding:6px 14px; }
   .mknav .addbtn { color:#fff; border-color:#fff; }
+  .mklist { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:0 8px 8px; }
+  .mklist[hidden], .mkw[hidden] { display:none; }
+  .mkpg { display:block; position:relative; width:100%; padding:0; margin:0 0 8px; border:0; border-radius:4px; background:#fff; overflow:hidden; }
+  .mkpg canvas { display:block; width:100%; height:auto; }
+  .mkpg span { position:absolute; right:6px; top:6px; background:rgba(0,0,0,.65); color:#fff; font-size:12px; padding:2px 8px; border-radius:99px; }
   .mkw canvas { max-width:100%; max-height:100%; touch-action:none; background:#fff; transform-origin:0 0; }
   .pblock .pbtns .addbtn { flex:1; text-align:center; }
   .pblock .addbtn { padding:6px 12px; font-size:14px; border-radius:8px; background:transparent; color:var(--brand); border:1px solid var(--brand); cursor:pointer; font-weight:600; }
@@ -925,7 +930,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-03-c (test copy)';
+const APP_VERSION = '2026-11-03-d (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -2364,7 +2369,7 @@ function loadPdfJs() {
 const ORD = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth', 'eleventh', 'twelfth'];
 const reEsc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 async function bestPage(doc, who) { // the page whose text names this floor (and building); page 1 when unsure
-  if (!who.fl) return 1;
+  if (!who.fl) return 0;
   const n = who.fl, w = ORD[+n];
   const fre = new RegExp(`\\b0?${n}(?:st|nd|rd|th)?\\s*(?:fl\\.?|floor|flr|level|lvl)\\b|\\b(?:floor|flr|level|lvl)\\s*[-#:]?\\s*0?${n}\\b` + (w ? `|\\b${w}\\s+floor\\b` : ''), 'i');
   const bre = who.bld && new RegExp(`\\b(?:bldg\\.?|building)\\s*[-:#]?\\s*${reEsc(who.bld)}\\b|\\b${reEsc(who.bld)}\\s*-?\\s*(?:bldg|building)\\b`, 'i');
@@ -2374,7 +2379,7 @@ async function bestPage(doc, who) { // the page whose text names this floor (and
     const sc = (fre.test(t) ? 2 : 0) + (bre && bre.test(t) ? 1 : 0);
     if (sc > best) { best = sc; at = i; ties = 0; } else if (sc && sc === best) ties++;
   }
-  return best >= 2 && !ties ? at : 1;
+  return best >= 2 && !ties ? at : 0; // 0 = not sure: show all the pages to scroll through
 }
 function mapsHere() { const cur = mapIdx()[cfg().base]; return ((cur && cur.items) || []).filter((m) => /pdf/i.test(m.type) || /\.pdf$/i.test(m.fn) || /image/i.test(m.type)); }
 async function locMarkup(file) {
@@ -2385,22 +2390,22 @@ async function locMarkup(file) {
   const dlg = document.createElement('dialog'); dlg.className = 'mkdlg';
   const bar = document.createElement('div'); bar.className = 'mkbar';
   const no = document.createElement('button'); no.type = 'button'; no.className = 'secondary'; no.textContent = 'Cancel';
-  const tip = document.createElement('span'); tip.textContent = 'Pinch to zoom. Tap where the damper is. Drag the label to move it.' + (op ? '' : ' No test result yet, so the label is white.');
+  const tip = document.createElement('span'); tip.textContent = 'Pinch to zoom, tap the damper. Drag the label to move it.' + (op ? '' : ' No result yet: white label.');
   const ok = document.createElement('button'); ok.type = 'button'; ok.textContent = 'Use as Location Pic'; ok.disabled = true;
   bar.append(no, tip, ok);
   const nav = document.createElement('div'); nav.className = 'mknav';
   const pick = document.createElement('select'); pick.setAttribute('aria-label', 'Map');
   maps.forEach((m, i) => pick.add(new Option(m.rec && m.rec !== m.fn ? m.rec + ' · ' + m.fn : m.fn, i)));
-  const prev = document.createElement('button'); prev.type = 'button'; prev.className = 'secondary'; prev.textContent = '‹';
+  const all = document.createElement('button'); all.type = 'button'; all.className = 'secondary'; all.textContent = '☰ All pages';
   const pg = document.createElement('span');
-  const next = document.createElement('button'); next.type = 'button'; next.className = 'secondary'; next.textContent = '›';
   const shot = document.createElement('label'); shot.className = 'addbtn'; shot.textContent = '🖼 Screenshot';
   const shotIn = document.createElement('input'); shotIn.type = 'file'; shotIn.accept = 'image/*'; shotIn.hidden = true; shot.append(shotIn);
   if (maps.length > 1) nav.append(pick);
-  nav.append(prev, pg, next, shot);
+  nav.append(all, pg, shot);
   const wrap = document.createElement('div'); wrap.className = 'mkw';
   const cv = document.createElement('canvas'); wrap.append(cv);
-  dlg.append(bar, nav, wrap); document.body.append(dlg); dlg.showModal();
+  const list = document.createElement('div'); list.className = 'mklist'; list.hidden = true; // every page, top to bottom
+  dlg.append(bar, nav, wrap, list); document.body.append(dlg); dlg.showModal();
   const g = cv.getContext('2d');
   let W = 0, H = 0, px = null, base = null, u = 1, sq = 8, fs = 12, font = '', bw = 0, bh = 0;
   let pt = null, lab = null, moved = false, drag = null, doc = null, page = 1, busy = false;
@@ -2423,7 +2428,7 @@ async function locMarkup(file) {
     let bmp; try { bmp = await createImageBitmap(f, { imageOrientation: 'from-image' }); } catch { toast('Could not read that picture'); return false; }
     if (doc) { doc.destroy(); doc = null; }
     setPic(bmp, bmp.width, bmp.height); bmp.close && bmp.close();
-    nav.hidden = !maps.length; prev.hidden = next.hidden = pg.hidden = true; return true;
+    nav.hidden = !maps.length; all.hidden = pg.hidden = true; list.hidden = true; wrap.hidden = false; return true;
   };
   const showPage = async (n) => {
     if (!doc || busy) return; busy = true;
@@ -2435,11 +2440,42 @@ async function locMarkup(file) {
       const cx = c.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
       await p.render({ canvasContext: cx, viewport: v }).promise;
       setPic(c, c.width, c.height);
-      pg.textContent = 'Page ' + page + ' of ' + doc.numPages; prev.disabled = page <= 1; next.disabled = page >= doc.numPages;
+      list.hidden = true; wrap.hidden = false; all.hidden = doc.numPages < 2;
+      pg.textContent = 'Page ' + page + ' of ' + doc.numPages;
     } catch { toast('Could not draw that page'); } finally { busy = false; }
   };
+  let listFor = null;
+  const showList = (at) => {
+    if (!doc) return;
+    wrap.hidden = true; list.hidden = false; all.hidden = true;
+    pg.textContent = 'Scroll to the floor, then tap its page';
+    if (listFor !== doc) { // build the list once per map; pages are drawn as they scroll into view
+      listFor = doc; list.textContent = '';
+      const d0 = doc, io = new IntersectionObserver((es) => es.forEach(async (en) => {
+        if (!en.isIntersecting || en.target.dataset.done) return;
+        en.target.dataset.done = '1'; io.unobserve(en.target);
+        try {
+          const p = await d0.getPage(+en.target.dataset.n), v1 = p.getViewport({ scale: 1 });
+          const w = Math.min(1400, Math.round(list.clientWidth * (window.devicePixelRatio || 1)));
+          const v = p.getViewport({ scale: w / v1.width });
+          const c = en.target.querySelector('canvas'); c.width = Math.round(v.width); c.height = Math.round(v.height);
+          await p.render({ canvasContext: c.getContext('2d'), viewport: v }).promise;
+          en.target.style.aspectRatio = '';
+        } catch {}
+      }), { root: list, rootMargin: '600px 0px' });
+      for (let i = 1; i <= doc.numPages; i++) {
+        const it = document.createElement('button'); it.type = 'button'; it.className = 'mkpg'; it.dataset.n = i;
+        it.style.aspectRatio = '17 / 11';
+        const c = document.createElement('canvas'), t = document.createElement('span'); t.textContent = 'Page ' + i;
+        it.append(c, t); it.onclick = () => showPage(i);
+        list.append(it); io.observe(it);
+      }
+    }
+    const el = at && list.children[at - 1];
+    requestAnimationFrame(() => { list.scrollTop = el ? el.offsetTop - 8 : 0; });
+  };
   const openMap = async (i) => {
-    const m = maps[i]; pg.textContent = 'Opening map…'; prev.hidden = next.hidden = pg.hidden = false;
+    const m = maps[i]; pg.textContent = 'Opening map…'; pg.hidden = false; all.hidden = true; list.textContent = ''; listFor = null;
     let blob; try { blob = await mapBlob(m); } catch { toast('This map is not saved on this device yet. Open the job once with signal.'); pg.textContent = ''; return; }
     if (doc) { doc.destroy(); doc = null; }
     if (!/pdf/i.test(m.type) && !/\.pdf$/i.test(m.fn)) { await fromFile(blob); return; }
@@ -2447,7 +2483,8 @@ async function locMarkup(file) {
       const L = await loadPdfJs();
       doc = await L.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
       pg.textContent = 'Finding floor ' + (who.fl || '') + '…';
-      await showPage(await bestPage(doc, who));
+      const n = doc.numPages > 1 ? await bestPage(doc, who) : 1;
+      if (n) await showPage(n); else showList(0);
     } catch { toast('Could not open this map. Use 🖼 Screenshot instead.'); pg.textContent = ''; }
   };
   const light = (x, y) => { // share of empty (light) pixels under a label spot
@@ -2536,7 +2573,7 @@ async function locMarkup(file) {
     tap = null; drag = null;
   };
   cv.onpointerup = up; cv.onpointercancel = up;
-  prev.onclick = () => showPage(page - 1); next.onclick = () => showPage(page + 1);
+  all.onclick = () => showList(page);
   pick.onchange = () => openMap(+pick.value);
   shotIn.onchange = async () => { const f = shotIn.files[0]; shotIn.value = ''; if (f) await fromFile(f); };
   no.onclick = close; dlg.addEventListener('cancel', (e) => { e.preventDefault(); close(); });

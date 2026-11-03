@@ -1,5 +1,5 @@
 // Keeps the app available offline. Online: always fetch the newest files. Offline: use the saved copy.
-const CACHE = 'beta-v19';
+const CACHE = 'beta-v20';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'pdfjs/pdf.min.js', 'pdfjs/pdf.worker.min.js'];
 
 self.addEventListener('install', (e) => {
