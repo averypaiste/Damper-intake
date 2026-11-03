@@ -304,6 +304,21 @@
   .psbox.has { border-style:solid; border-color:#1f9d55; }
   #fmode { margin-left:auto; }
   @media (min-width:900px) { main { max-width:900px; } }
+  /* bottom bar: the buttons that used to sit at the top */
+  #btnMap, #btnOffline, #fmode { display:none !important; }
+  body { padding-bottom:calc(84px + env(safe-area-inset-bottom)); }
+  #btnNew { bottom:calc(84px + env(safe-area-inset-bottom)); }
+  #tabbar { position:fixed; left:0; right:0; bottom:0; z-index:6; display:flex; justify-content:center; background:var(--card); border-top:1px solid var(--line); padding:6px 4px calc(6px + env(safe-area-inset-bottom)); }
+  #tabbar[hidden] { display:none; }
+  #tabbar button { flex:1; max-width:150px; background:none; color:var(--muted); border:0; border-radius:10px; padding:4px 0; font-size:11.5px; font-weight:700; display:flex; flex-direction:column; align-items:center; gap:1px; position:relative; }
+  #tabbar button b { font-size:21px; line-height:1.15; font-weight:400; }
+  #tabbar button.on { color:#0e7c74; }
+  #tabbar button.on b { background:#d7efec; border-radius:12px; padding:0 14px; }
+  #tabbar button.off { opacity:.35; }
+  #tabbar #tabOff.kept { color:#1a7f4b; }
+  #tabbar i { position:absolute; top:0; left:calc(50% + 6px); min-width:18px; height:18px; border-radius:9px; background:#f79009; color:#fff; font-style:normal; font-size:11px; line-height:18px; padding:0 5px; }
+  #tabbar button.busy b { animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -316,6 +331,13 @@
 </header>
 
 <button type="button" id="btnNew">+ New damper</button>
+<nav id="tabbar">
+  <button type="button" id="tabList"><b>🧰</b>Tech view</button>
+  <button type="button" id="tabTable"><b>📋</b>Manager view</button>
+  <button type="button" id="tabMap"><b>🗺</b>Map</button>
+  <button type="button" id="tabOff"><b>⬇</b><span>Offline</span></button>
+  <button type="button" id="tabSync"><b>☁</b><span>Synced</span><i id="tabSyncN" hidden></i></button>
+</nav>
 <div id="moveBar" hidden><div id="mvText"></div><div id="mvHint" class="hint"></div><label id="mvKeepL"><input type="checkbox" id="mvKeep"> Keep a copy in the old box too</label><button type="button" id="mvCancel">Cancel</button></div>
 <div id="pasteBar" hidden><div id="pbVal"></div><div id="pbHint" class="hint"></div><button type="button" id="pbDone">Done</button></div>
 <main>
@@ -889,7 +911,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-03-a (floor checklist test)';
+const APP_VERSION = '2026-11-03-b (floor checklist test)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -2213,6 +2235,31 @@ async function renderHome() {
 $('hMiss').onclick = () => { onlyMiss = !onlyMiss; renderHome(); };
 const setFmode = () => { $('fmode').textContent = floorMode ? '▦ Table' : '☰ Checklist'; };
 setFmode();
+// bottom bar: mirrors the (hidden) top buttons so all the old logic keeps working
+async function updTabs() {
+  const tb = $('tabbar'); if (!tb) return;
+  tb.hidden = !$('projects').hidden;
+  $('tabList').classList.toggle('on', floorMode); $('tabTable').classList.toggle('on', !floorMode);
+  $('tabMap').classList.toggle('off', $('btnMap').hidden);
+  const on = $('btnOffline').classList.contains('on');
+  $('tabOff').classList.toggle('kept', on); $('tabOff').querySelector('span').textContent = on ? $('btnOffline').textContent.replace('✓ ', '') : 'Offline';
+  $('tabOff').querySelector('b').textContent = on ? '✓' : '⬇';
+  let n = 0; try { n = (await allItems()).filter((i) => i.status !== 'synced').length; } catch {}
+  $('tabSyncN').hidden = !n; $('tabSyncN').textContent = n;
+  $('tabSync').querySelector('span').textContent = n ? 'Sync' : 'Synced';
+}
+$('tabList').onclick = () => { if (!floorMode) $('fmode').click(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+$('tabTable').onclick = () => { if (floorMode) $('fmode').click(); };
+$('tabMap').onclick = () => { if ($('btnMap').hidden) toast('No job map for this job yet (it comes from the job\'s Drawing table).'); else $('btnMap').click(); };
+$('tabOff').onclick = () => $('btnOffline').click();
+$('tabSync').onclick = async () => {
+  const b = $('tabSync'); b.classList.add('busy');
+  try { if (navigator.onLine) await sync(true); else toast('Offline: entries will send when you have signal.'); } finally { b.classList.remove('busy'); }
+  if (!$('savedCard').hidden) $('savedCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+{ let t = 0; const mo = new MutationObserver(() => { clearTimeout(t); t = setTimeout(updTabs, 50); });
+  for (const id of ['btnMap', 'btnOffline', 'projects', 'count', 'fmode']) mo.observe($(id), { attributes: true, childList: true, characterData: true, subtree: true }); }
+updTabs();
 $('fmode').onclick = () => { floorMode = !floorMode; try { localStorage.setItem('fmode', floorMode ? 'list' : 'grid'); } catch {} setFmode(); renderHome(); };
 $('hIns').onchange = () => renderHome(); $('hBld').onchange = () => { try { localStorage.setItem('sel_bld', $('hBld').value); localStorage.setItem('sel_flr', ''); } catch {} $('hFlr').value = ''; renderHome(); };
 $('navPrev').onclick = () => navGo(-1); $('navNext').onclick = () => navGo(1);
