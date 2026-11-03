@@ -911,7 +911,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-03-b (floor checklist test)';
+const APP_VERSION = '2026-11-03-c (floor checklist test)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -1952,6 +1952,7 @@ function renderGrid(list, groups, ctx) {
   setW(); requestAnimationFrame(setW);
 }
 // ---- Floor checklist: one row per damper with ✓ (pass) ✕ (fail) ⋯ (open) buttons ----
+let ftabsX = 0;
 let fStat = (() => { try { return localStorage.getItem('fstat') || 'todo'; } catch { return 'todo'; } })();
 const STAT = (v) => { v = String(v || ''); return !v ? 'todo' : /^pass/i.test(v) ? 'pass' : /fail/i.test(v) ? 'fail' : /no access/i.test(v) ? 'na' : 'other'; };
 const STATCOL = { pass: '#1f9d55', fail: '#d64035', na: '#f2b705', other: '#5b8def', todo: '#c9ced4' };
@@ -1974,6 +1975,7 @@ function renderFloor(list, hits, ctx) {
   const bar = document.createElement('div'); bar.className = 'fbar';
   for (const k of ['pass', 'other', 'na', 'fail']) if (cnt[k]) { const i = document.createElement('i'); i.style.width = (100 * cnt[k] / Math.max(1, hits.length)) + '%'; i.style.background = STATCOL[k]; bar.append(i); }
   const tabs = document.createElement('div'); tabs.className = 'ftabs';
+  tabs.addEventListener('scroll', () => { ftabsX = tabs.scrollLeft; }, { passive: true });
   for (const [k, t] of [['todo', 'To do'], ['all', 'All'], ['fail', 'Fail'], ['na', 'No access'], ['pass', 'Pass'], ['other', 'Other']]) {
     if (k !== 'todo' && k !== 'all' && !cnt[k]) continue;
     const b = document.createElement('button'); b.type = 'button'; b.className = 'ftab' + (fStat === k ? ' on' : ''); b.textContent = t + ' ' + cnt[k];
@@ -1981,6 +1983,7 @@ function renderFloor(list, hits, ctx) {
     tabs.append(b);
   }
   list.append(top, bar, tabs);
+  tabs.scrollLeft = ftabsX; // stay where it was scrolled to when the list refreshes itself
   const shown = hits.filter((n) => fStat === 'all' || STAT(opOf(n)) === fStat);
   navList = shown;
   if (!shown.length) { const e = document.createElement('p'); e.className = 'hint'; e.style.cssText = 'text-align:center;margin:22px 0'; e.textContent = !hits.length ? 'No dampers here yet. Tap ↻ to load, or change the filters.' : fStat === 'todo' ? '🎉 Every damper here has a result.' : 'None.'; list.append(e); return; }
