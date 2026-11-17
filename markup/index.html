@@ -61,6 +61,7 @@
   .seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
   .seg button { flex: 1; border: 0; background: #fff; padding: 9px; font-weight: 600; }
   .seg button.on { background: var(--ink); color: #fff; }
+  .seg button + button { border-left: 1px solid var(--line); }
   .toast { position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%); background: rgba(31,39,51,.94); color: #fff; padding: 9px 14px; border-radius: 10px; z-index: 30; max-width: 90%; text-align: center; }
   @media (max-width: 560px) { .top h1 { visibility: hidden; } }
   @media (min-width: 760px) { .panel { flex-direction: row; flex-wrap: wrap; align-items: center; } .panel .row { flex: 1 1 300px; } }
@@ -72,7 +73,7 @@
   <h1 id="title">Damper Markup</h1>
   <button class="tb" id="pagesBtn" type="button" hidden>☰ Pages</button>
   <button class="tb" id="undoBtn" type="button" disabled>↶ Undo</button>
-  <button class="tb go" id="saveBtn" type="button" disabled>Save picture</button>
+  <button class="tb go" id="saveBtn" type="button" disabled>Save</button>
 </div>
 
 <div class="stage" id="stage">
@@ -116,12 +117,13 @@
 
 <div class="sheet" id="sheet" hidden>
   <div class="box">
-    <h3>Save picture</h3>
+    <h3>Save</h3>
     <div class="seg"><button type="button" id="segView" class="on">What's on screen</button><button type="button" id="segPage">Whole page</button></div>
+    <div class="seg" id="pdfSeg"><button type="button" id="segMarked">PDF of marked pages</button><button type="button" id="segFull">Full PDF with marks</button></div>
     <img id="outImg" alt="Marked-up plan">
     <small id="outInfo"></small>
     <div class="btns">
-      <button type="button" class="pri" id="shareBtn">Share / Save to Photos</button>
+      <button type="button" class="pri" id="shareBtn">Share / Save to phone</button>
       <button type="button" id="dlBtn">Download</button>
       <button type="button" id="closeSheet">Close</button>
     </div>
@@ -132,7 +134,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = '2026-11-16-a';
+const APP_VERSION = '2026-11-16-b';
 const $ = (id) => document.getElementById(id);
 $('ver').textContent = 'Version ' + APP_VERSION + ' · works offline once opened · nothing is uploaded';
 
@@ -208,7 +210,8 @@ async function openFile(file, remember) {
     const doc = { name, key: name + ':' + file.size, kind: isPdf ? 'pdf' : 'img', n: 1 };
     if (isPdf) {
       const L = await pdfLib();
-      doc.pdf = await L.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+      const buf = await file.arrayBuffer(); doc.bytes = buf.slice(0);
+      doc.pdf = await L.getDocument({ data: new Uint8Array(buf) }).promise;
       doc.n = doc.pdf.numPages;
     } else {
       doc.img = await loadImg(file);
@@ -237,8 +240,8 @@ function loadImg(file) {
 /* ---------- page list (scrolls up and down) ---------- */
 let pagesObs = null;
 function showPages() {
-  const box = $('pages'); box.innerHTML = ''; box.hidden = false; $('panel').hidden = true;
-  $('saveBtn').disabled = true; $('undoBtn').disabled = true; hint('');
+  const box = $('pages'); box.innerHTML = ''; box.hidden = false; $('panel').hidden = true; $('pagesBtn').textContent = '☰ Pages';
+  $('saveBtn').disabled = !markedPages().length; $('undoBtn').disabled = true; hint('');
   if (pagesObs) pagesObs.disconnect();
   pagesObs = new IntersectionObserver((ents) => ents.forEach((en) => { if (en.isIntersecting) { pagesObs.unobserve(en.target); drawThumb(en.target); } }), { root: box, rootMargin: '400px' });
   for (let i = 1; i <= S.doc.n; i++) {
@@ -268,6 +271,7 @@ async function openPage(n) {
   hint('Opening page…');
   cancelDetail();
   S.pageNo = n; S.sel = null; S.undo = [];
+  $('pagesBtn').textContent = '☰ ' + n + ' / ' + S.doc.n;
   if (S.doc.kind === 'pdf') {
     const page = await S.doc.pdf.getPage(n);
     const v1 = page.getViewport({ scale: 1 });
@@ -559,22 +563,84 @@ function outName() {
   const base = ids.length ? (ids.length <= 2 ? ids.join('_') : ids[0] + '_to_' + ids[ids.length - 1]) : S.doc.name.replace(/\.[^.]+$/, '');
   return (base.replace(/[^\w.-]+/g, '-') || 'markup') + '-markup.png';
 }
-async function refreshOut() {
-  $('segView').classList.toggle('on', outMode === 'view'); $('segPage').classList.toggle('on', outMode === 'page');
-  $('outInfo').textContent = 'Making the picture…';
-  try {
-    const o = await buildOut(outMode); outBlob = o.blob;
-    if ($('outImg').src) URL.revokeObjectURL($('outImg').src);
-    $('outImg').src = URL.createObjectURL(o.blob);
-    $('outInfo').textContent = outName() + ' · ' + o.w + ' × ' + o.h + ' px. On a phone you can also press and hold the picture to save it.';
-  } catch (err) { $('outInfo').textContent = 'Could not make the picture. Try "What\'s on screen" zoomed in closer.'; }
+let pdfLibWP = null;
+function pdfWriter() {
+  return pdfLibWP || (pdfLibWP = new Promise((res, rej) => {
+    const sc = document.createElement('script'); sc.src = 'pdf-lib.min.js';
+    sc.onload = () => res(window.PDFLib);
+    sc.onerror = () => { pdfLibWP = null; rej(new Error('offline')); };
+    document.head.appendChild(sc);
+  }));
 }
-$('saveBtn').onclick = () => { if (!S.page) return; S.sel = null; syncPanel(); draw(); outBlob = null; $('sheet').hidden = false; const f = new File([new Blob()], 'a.png', { type: 'image/png' }); $('shareBtn').hidden = !(navigator.canShare && navigator.canShare({ files: [f] })); refreshOut(); };
-$('segView').onclick = () => { outMode = 'view'; refreshOut(); }; $('segPage').onclick = () => { outMode = 'page'; refreshOut(); };
+function markedPages() { const P = S.store.pages || {}; return Object.keys(P).map(Number).filter((n) => P[n] && P[n].length).sort((a, b) => a - b); }
+function markBox(m) { const L = layout(m), p = 8 * m.s; return { x0: Math.min(m.bx, m.x - L.rx) - p, y0: Math.min(m.by, m.y - L.ry) - p, x1: Math.max(m.bx + L.w, m.x + L.rx) + p, y1: Math.max(m.by + L.h, m.y + L.ry) + p }; }
+// Puts the marks on top of the original PDF pages, so the plan stays as sharp as the original.
+async function buildPdf(mode) {
+  const PL = await pdfWriter();
+  const src = await PL.PDFDocument.load(S.doc.bytes, { ignoreEncryption: true });
+  if (src.isEncrypted) throw new Error('locked');
+  const nums = markedPages(); let out = src, pages;
+  if (mode === 'marked') {
+    out = await PL.PDFDocument.create();
+    const cp = await out.copyPages(src, nums.map((n) => n - 1)); cp.forEach((p) => out.addPage(p));
+    pages = nums.map((n, i) => [n, out.getPage(i)]);
+  } else pages = nums.map((n) => [n, src.getPage(n - 1)]);
+  for (const [n, pg] of pages) {
+    const pj = await S.doc.pdf.getPage(n), t = pj.getViewport({ scale: 1 }).transform;
+    const det = t[0] * t[3] - t[1] * t[2];
+    const inv = [t[3] / det, -t[1] / det, -t[2] / det, t[0] / det, (t[2] * t[5] - t[3] * t[4]) / det, (t[1] * t[4] - t[0] * t[5]) / det];
+    for (const m of S.store.pages[n]) {
+      const B = markBox(m), bw = B.x1 - B.x0, bh = B.y1 - B.y0, q = Math.min(16, 1000 / Math.max(bw, bh));
+      const c = document.createElement('canvas'); c.width = Math.ceil(bw * q); c.height = Math.ceil(bh * q);
+      const g2 = c.getContext('2d'); g2.setTransform(q, 0, 0, q, -B.x0 * q, -B.y0 * q); drawMark(g2, m, false);
+      const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+      const img = await out.embedPng(await blob.arrayBuffer());
+      const name = pg.node.newXObject('Mk', img.ref);
+      pg.pushOperators(PL.pushGraphicsState(), PL.concatTransformationMatrix(inv[0], inv[1], inv[2], inv[3], inv[4], inv[5]),
+        PL.concatTransformationMatrix(bw, 0, 0, -bh, B.x0, B.y0 + bh), PL.drawObject(name), PL.popGraphicsState());
+    }
+  }
+  return new Blob([await out.save()], { type: 'application/pdf' });
+}
+let outFile = 'markup.png';
+async function refreshOut() {
+  const isPdfOut = outMode === 'marked' || outMode === 'full';
+  for (const [id, k] of [['segView', 'view'], ['segPage', 'page'], ['segMarked', 'marked'], ['segFull', 'full']]) $(id).classList.toggle('on', outMode === k);
+  $('outInfo').textContent = isPdfOut ? 'Making the PDF…' : 'Making the picture…';
+  $('outImg').hidden = isPdfOut; outBlob = null;
+  try {
+    if (isPdfOut) {
+      const nums = markedPages();
+      if (!nums.length) { $('outInfo').textContent = 'No marks yet. Add a mark on any page first.'; return; }
+      const blob = await buildPdf(outMode); outBlob = blob;
+      outFile = S.doc.name.replace(/\.pdf$/i, '') + (outMode === 'marked' ? '-marked-pages.pdf' : '-marked.pdf');
+      const cnt = nums.reduce((a, n) => a + S.store.pages[n].length, 0);
+      $('outInfo').textContent = outFile + ' · ' + (outMode === 'marked' ? nums.length + ' page' + (nums.length > 1 ? 's' : '') : 'all ' + S.doc.n + ' pages') + ' · ' + cnt + ' mark' + (cnt > 1 ? 's' : '') + ' on page' + (nums.length > 1 ? 's ' : ' ') + nums.join(', ') + ' · ' + (blob.size / 1048576).toFixed(1) + ' MB';
+    } else {
+      const o = await buildOut(outMode); outBlob = o.blob; outFile = outName();
+      if ($('outImg').src) URL.revokeObjectURL($('outImg').src);
+      $('outImg').src = URL.createObjectURL(o.blob);
+      $('outInfo').textContent = outFile + ' · ' + o.w + ' × ' + o.h + ' px. On a phone you can also press and hold the picture to save it.';
+    }
+  } catch (err) {
+    const msg = err && err.message;
+    $('outInfo').textContent = isPdfOut ? (msg === 'locked' ? 'This PDF is locked, so marks can\'t be added to it. Save pictures of the pages instead.' : msg === 'offline' ? 'Open this page once while online to get the PDF maker, then try again.' : 'Could not make the PDF. Save pictures of the pages instead.') : 'Could not make the picture. Try "What\'s on screen" zoomed in closer.';
+  }
+}
+$('saveBtn').onclick = () => {
+  if (!S.doc) return; persist(); S.sel = null; if (S.page) { syncPanel(); draw(); }
+  const inList = !$('pages').hidden, isPdf = S.doc.kind === 'pdf';
+  $('pdfSeg').hidden = !isPdf; $('segView').parentNode.hidden = inList;
+  if (inList || (!isPdf && (outMode === 'marked' || outMode === 'full'))) outMode = inList ? 'marked' : 'view';
+  $('sheet').hidden = false;
+  const f = new File([new Blob()], 'a.png', { type: 'image/png' }); $('shareBtn').hidden = !(navigator.canShare && navigator.canShare({ files: [f] }));
+  refreshOut();
+};
+for (const [id, k] of [['segView', 'view'], ['segPage', 'page'], ['segMarked', 'marked'], ['segFull', 'full']]) $(id).onclick = () => { outMode = k; refreshOut(); };
 $('closeSheet').onclick = () => { $('sheet').hidden = true; };
 $('sheet').onclick = (e) => { if (e.target === $('sheet')) $('sheet').hidden = true; };
-$('shareBtn').onclick = async () => { if (!outBlob) return; try { await navigator.share({ files: [new File([outBlob], outName(), { type: 'image/png' })] }); } catch (e) { if (e && e.name !== 'AbortError') toast('Sharing did not work. Use Download.'); } };
-$('dlBtn').onclick = () => { if (!outBlob) return; const a = document.createElement('a'); a.href = URL.createObjectURL(outBlob); a.download = outName(); document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
+$('shareBtn').onclick = async () => { if (!outBlob) return; try { await navigator.share({ files: [new File([outBlob], outFile, { type: outBlob.type })] }); } catch (e) { if (e && e.name !== 'AbortError') toast('Sharing did not work. Use Download.'); } };
+$('dlBtn').onclick = () => { if (!outBlob) return; const a = document.createElement('a'); a.href = URL.createObjectURL(outBlob); a.download = outFile; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
 
 /* ---------- start ---------- */
 resize();
