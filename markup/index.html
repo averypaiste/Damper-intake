@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.airtable.com https://*.airtableusercontent.com; connect-src 'self' blob: data: https://*.airtable.com https://*.airtableusercontent.com; worker-src 'self' blob:; manifest-src 'self'; font-src 'self' data:; media-src 'self' blob: data:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Damper Markup</title>
 <link rel="manifest" href="manifest.webmanifest">
@@ -34,6 +36,16 @@
   .chip.st { background: #fff; border-width: 1px; border-color: var(--line); }
   .sb { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 8px 12px; font-weight: 600; flex: none; }
   .sb.del { color: #b42318; border-color: #f3c1bc; }
+  .sb.tidy { flex: none; background: #fff7e0; border-color: #f0c64a; }
+  .chip.ink { background: #fff; border-width: 1px; border-color: var(--line); display: flex; align-items: center; gap: 6px; }
+  .chip.ink i { display: inline-block; width: 22px; height: 4px; border-radius: 2px; }
+  .sb.keep { flex: none; font-weight: 700; color: #fff; background: #1f7a3a; border-color: #1f7a3a; }
+  .sb.keep.ok { background: #e7f6ea; color: #1f7a3a; border-color: #9fd5ab; }
+  .alldoc { flex: none; width: 100%; max-width: 760px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; position: sticky; top: 0; z-index: 2; box-shadow: 0 4px 14px rgba(15,20,30,.18); }
+  .alldoc .big { padding: 12px 18px; font-size: 16px; }
+  .alldoc b { font-size: 15px; }
+  .alldoc span { color: var(--muted); font-size: 13px; }
+  .pg .cap span.ok { color: #1f7a3a; font-weight: 700; }
   .sb.done { background: var(--accent); color: #fff; border-color: var(--accent); margin-left: auto; }
   /* start screen */
   .start { position: absolute; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; overflow: auto; }
@@ -80,7 +92,7 @@
   <h1 id="title">Damper Markup</h1>
   <button class="tb" id="pagesBtn" type="button" hidden>☰ Pages</button>
   <button class="tb" id="undoBtn" type="button" disabled>↶ Undo</button>
-  <button class="tb go" id="saveBtn" type="button" disabled>Save</button>
+  <button class="tb go" id="saveBtn" type="button" disabled>📄 Export</button>
 </div>
 
 <div class="stage" id="stage">
@@ -107,14 +119,20 @@
     <div class="lbl" id="modeLbl">Next ID</div>
     <input type="text" id="idIn" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="FSD-1-12" enterkeyhint="done">
     <button class="sb done" id="doneBtn" type="button" hidden>Done</button>
+    <button class="sb keep" id="keepBtn" type="button">💾 Save page</button>
   </div>
   <div class="row">
     <div class="lbl">Style</div>
-    <div class="chips" id="styles"><button type="button" class="chip st" data-k="line">▪ Square + line</button><button type="button" class="chip st" data-k="circle">◯ Circle + arrow</button></div>
+    <div class="chips" id="styles"><button type="button" class="chip st" data-k="line">▪ Square</button><button type="button" class="chip st" data-k="circle">◯ Circle</button></div>
+    <button class="sb tidy" id="tidyBtn" type="button">✨ Tidy labels</button>
   </div>
   <div class="row">
     <div class="lbl">Color</div>
     <div class="chips" id="chips"></div>
+  </div>
+  <div class="row">
+    <div class="lbl">Line</div>
+    <div class="chips" id="inks"></div>
   </div>
   <div class="row" id="editRow" hidden>
     <div class="lbl">Note</div>
@@ -130,7 +148,7 @@
 
 <div class="sheet" id="sheet" hidden>
   <div class="box">
-    <h3>Save</h3>
+    <h3>Export</h3>
     <div class="seg"><button type="button" id="segView" class="on">What's on screen</button><button type="button" id="segPage">Whole page</button></div>
     <div class="seg" id="pdfSeg"><button type="button" id="segMarked">PDF of marked pages</button><button type="button" id="segFull">Full PDF with marks</button></div>
     <img id="outImg" alt="Marked-up plan">
@@ -147,7 +165,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = '2026-11-16-e';
+const APP_VERSION = '2026-11-17-e';
 const $ = (id) => document.getElementById(id);
 $('ver').textContent = 'Version ' + APP_VERSION + ' · works offline once opened · nothing is uploaded';
 
@@ -160,6 +178,16 @@ const COLORS = [
 ];
 const fillOf = (k) => (COLORS.find((c) => c.key === k) || COLORS[0]).fill;
 const RED = '#e81e24';
+// Line color: the leader line, the square on the spot and the label's border. Bright colors stand out over the black plan lines.
+const INKS = [
+  { key: 'black', name: 'Black', c: '#000000' },
+  { key: 'red', name: 'Red', c: '#e81e24' },
+  { key: 'blue', name: 'Blue', c: '#1460f0' },
+  { key: 'magenta', name: 'Magenta', c: '#d6129b' },
+  { key: 'orange', name: 'Orange', c: '#ff7a00' },
+  { key: 'green', name: 'Green', c: '#0a9c3a' },
+];
+const inkOf = (k) => (INKS.find((c) => c.key === k) || INKS[0]).c;
 const FONT = 'Arial, Helvetica, sans-serif';
 
 /* ---------- state ---------- */
@@ -170,7 +198,7 @@ const S = {
   detail: null, detailView: null, detailTask: null, detailTimer: 0,
   view: { k: 1, tx: 0, ty: 0 },        // page units -> CSS pixels
   marks: [], sel: null, undo: [],
-  nextId: '', color: 'pink', sizeMul: 1, style: 'line',
+  nextId: '', color: 'pink', ink: 'black', sizeMul: 1, style: 'line',
   store: {},                           // saved marks for this file: { pages:{n:[...]}, nextId, color, sizeMul }
 };
 const cv = $('cv'), ctx = cv.getContext('2d');
@@ -187,9 +215,27 @@ function persist() {
   if (!S.doc) return;
   S.store.pages = S.store.pages || {};
   if (S.marks.length) S.store.pages[S.pageNo] = S.marks; else delete S.store.pages[S.pageNo];
-  S.store.nextId = S.nextId; S.store.color = S.color; S.store.sizeMul = S.sizeMul; S.store.style = S.style; S.store.page = S.pageNo;
+  S.store.nextId = S.nextId; S.store.color = S.color; S.store.sizeMul = S.sizeMul; S.store.style = S.style; S.store.ink = S.ink; S.store.page = S.pageNo;
   lsSet('markup:' + S.doc.key, S.store);
+  syncKeep();
 }
+/* "Save page": everything is already kept on this device as you go, this confirms it and shows it in the page list */
+const pageSig = () => JSON.stringify(S.marks);
+function isKept(n) { const k = (S.store.kept || {})[n]; return !!k && k === JSON.stringify((S.store.pages || {})[n] || []); }
+function syncKeep() {
+  const b = $('keepBtn'); if (!b || !S.page) return;
+  const ok = isKept(S.pageNo) && (S.store.kept || {})[S.pageNo] === pageSig();
+  b.textContent = ok ? '✓ Saved' : '💾 Save page'; b.classList.toggle('ok', ok);
+}
+$('keepBtn').onclick = () => {
+  if (!S.doc || !S.page) return;
+  if (!S.marks.length) { toast('Nothing to save on this page yet. Add a label first.'); return; }
+  S.sel = null; syncPanel(); draw();
+  S.store.kept = S.store.kept || {}; S.store.kept[S.pageNo] = pageSig(); persist();
+  const nums = markedPages(), saved = nums.filter(isKept);
+  if (S.doc.kind !== 'pdf' || S.doc.n < 2) toast('Saved on this device. Tap 📄 Export to share it.');
+  else toast('Page ' + S.pageNo + ' saved. ' + saved.length + ' of ' + nums.length + ' marked page' + (nums.length > 1 ? 's' : '') + ' saved. When you are done, tap ☰ Pages, then "All markups in one PDF".');
+};
 function idb() {
   return new Promise((res, rej) => {
     const r = indexedDB.open('damper-markup', 1);
@@ -251,14 +297,14 @@ async function openFile(file, remember) {
     if (isPdf) {
       const L = await pdfLib();
       const buf = await file.arrayBuffer(); doc.bytes = buf.slice(0);
-      doc.pdf = await L.getDocument({ data: new Uint8Array(buf) }).promise;
+      doc.pdf = await L.getDocument({ isEvalSupported: false, data: new Uint8Array(buf) }).promise;
       doc.n = doc.pdf.numPages;
     } else {
       doc.img = await loadImg(file);
     }
     S.doc = doc;
     S.store = lsGet('markup:' + doc.key) || {};
-    S.nextId = S.store.nextId || ''; S.color = S.store.color || 'pink'; S.sizeMul = S.store.sizeMul || 1; S.style = S.store.style || 'line';
+    S.nextId = S.store.nextId || ''; S.color = S.store.color || 'pink'; S.sizeMul = S.store.sizeMul || 1; S.style = S.store.style || 'line'; S.ink = S.store.ink || 'black';
     if (remember) idbSet('last', { blob: file, name, type: file.type });
     $('title').textContent = name;
     $('start').hidden = true; $('pages').hidden = true;
@@ -284,10 +330,20 @@ function showPages() {
   $('saveBtn').disabled = !markedPages().length; $('undoBtn').disabled = true; hint('');
   if (pagesObs) pagesObs.disconnect();
   pagesObs = new IntersectionObserver((ents) => ents.forEach((en) => { if (en.isIntersecting) { pagesObs.unobserve(en.target); drawThumb(en.target); } }), { root: box, rootMargin: '400px' });
+  const nums = markedPages();
+  if (nums.length) {
+    const tot = nums.reduce((a, n) => a + S.store.pages[n].length, 0);
+    const hd = document.createElement('div'); hd.className = 'alldoc';
+    hd.innerHTML = '<b></b><span></span><button type="button" class="big">📄 All markups in one PDF</button>';
+    hd.querySelector('b').textContent = tot + ' label' + (tot > 1 ? 's' : '') + ' on ' + nums.length + ' page' + (nums.length > 1 ? 's' : '') + ' (' + nums.join(', ') + ')';
+    hd.querySelector('span').textContent = 'Makes one PDF with just the marked pages. You can also pick "Full PDF with marks" to keep every page.';
+    hd.querySelector('button').onclick = () => $('saveBtn').onclick();
+    box.appendChild(hd);
+  }
   for (let i = 1; i <= S.doc.n; i++) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'pg'; b.dataset.n = i;
     const cnt = ((S.store.pages || {})[i] || []).length;
-    b.innerHTML = '<div class="ph" style="aspect-ratio:1.4"></div><div class="cap">Page ' + i + '<span>' + (cnt ? cnt + ' mark' + (cnt > 1 ? 's' : '') : 'Tap to mark up') + '</span></div>';
+    b.innerHTML = '<div class="ph" style="aspect-ratio:1.4"></div><div class="cap">Page ' + i + '<span' + (cnt && isKept(i) ? ' class="ok">✓ Saved · ' : '>') + (cnt ? cnt + ' mark' + (cnt > 1 ? 's' : '') : 'Tap to mark up') + '</span></div>';
     b.onclick = () => { box.hidden = true; openPage(i); };
     box.appendChild(b); pagesObs.observe(b);
   }
@@ -361,10 +417,14 @@ function layout(m) {
     if (cur) lines.push(cur);
     for (const l of lines) w = Math.max(w, mctx.measureText(l).width + pad * 2);
   }
-  const top = (line ? 4 : 5) * s, noteY = top + fs * 1.22;
-  const h = line ? noteY + lines.length * lh + (lines.length ? 4 : 1) * s : Math.max(100 * s, noteY + lines.length * lh + pad);
+  let top = (line ? 4 : 5) * s, noteY = top + fs * 1.22;
+  let h = line ? noteY + lines.length * lh + (lines.length ? 4 : 1) * s : Math.max(100 * s, noteY + lines.length * lh + pad);
+  // "Tidy labels" gives every label on the page the same box size; the text is centered in it
+  let idX = pad;
+  if (m.fw && m.fw > w) { w = m.fw; if (line) idX = (w - idW) / 2; }
+  if (m.fh && m.fh > h) { const d = (m.fh - h) / 2; top += d; noteY += d; h = m.fh; }
   const r = line ? 9 * s : 0;
-  return { w, h, lines, rx: line ? r : 36 * s, ry: line ? r : 26 * s, pad, fs, nfs, lh, top, noteY, line };
+  return { w, h, lines, rx: line ? r : 36 * s, ry: line ? r : 26 * s, pad, fs, nfs, lh, top, noteY, line, idX };
 }
 function leader(m, L) {
   const s = m.s, cx = m.bx + L.w / 2, cy = m.by + L.h / 2, dx = m.x - cx, dy = m.y - cy;
@@ -378,30 +438,30 @@ function leader(m, L) {
   return { a, b, e, ang, ok };
 }
 function drawMark(c, m, selected) {
-  const s = m.s, L = layout(m), fill = fillOf(m.color);
+  const s = m.s, L = layout(m), fill = fillOf(m.color), ink = inkOf(m.ink), bold = ink !== '#000000';
   c.lineCap = 'butt'; c.lineJoin = 'miter';
   const G = leader(m, L);
   if (L.line) {
     // thin line from the label to the spot, then a small square in the label's color on the spot
-    c.strokeStyle = '#000'; c.lineWidth = 1.6 * s; c.lineCap = 'round';
+    c.strokeStyle = ink; c.lineWidth = (bold ? 2.4 : 1.6) * s; c.lineCap = 'round';
     c.beginPath(); c.moveTo(G.a.x, G.a.y); c.lineTo(m.x, m.y); c.stroke();
-    c.lineCap = 'butt'; c.fillStyle = fill; c.lineWidth = 1.4 * s;
+    c.lineCap = 'butt'; c.fillStyle = fill; c.lineWidth = (bold ? 2 : 1.4) * s;
     c.beginPath(); c.rect(m.x - L.rx * 0.72, m.y - L.ry * 0.72, L.rx * 1.44, L.ry * 1.44); c.fill(); c.stroke();
   } else {
     // red oval on the spot, arrow with a short stub off the box
     c.strokeStyle = RED; c.lineWidth = 4 * s;
     c.beginPath(); c.ellipse(m.x, m.y, L.rx, L.ry, 0, 0, Math.PI * 2); c.stroke();
     if (G.ok) {
-      c.strokeStyle = '#000'; c.lineWidth = 3 * s; c.lineCap = 'round';
+      c.strokeStyle = ink; c.lineWidth = 3 * s; c.lineCap = 'round';
       c.beginPath(); c.moveTo(G.a.x, G.a.y); c.lineTo(G.b.x, G.b.y); c.lineTo(G.e.x, G.e.y); c.stroke();
       for (const d of [0.38, -0.38]) { c.beginPath(); c.moveTo(G.e.x, G.e.y); c.lineTo(G.e.x - 26 * s * Math.cos(G.ang + d), G.e.y - 26 * s * Math.sin(G.ang + d)); c.stroke(); }
     }
   }
   // box
-  c.fillStyle = fill; c.strokeStyle = '#000'; c.lineWidth = (L.line ? 2 : 3) * s; c.lineCap = 'butt';
+  c.fillStyle = fill; c.strokeStyle = ink; c.lineWidth = (L.line ? (bold ? 2.6 : 2) : 3) * s; c.lineCap = 'butt';
   c.beginPath(); c.rect(m.bx, m.by, L.w, L.h); c.fill(); c.stroke();
   c.fillStyle = '#000'; c.textBaseline = 'top'; c.textAlign = 'left';
-  c.font = 'bold ' + L.fs + 'px ' + FONT; c.fillText(m.id || '', m.bx + L.pad, m.by + L.top);
+  c.font = 'bold ' + L.fs + 'px ' + FONT; c.fillText(m.id || '', m.bx + L.idX, m.by + L.top);
   c.font = L.nfs + 'px ' + FONT;
   L.lines.forEach((l, i) => c.fillText(l, m.bx + L.pad, m.by + L.noteY + i * L.lh));
   if (selected) {
@@ -560,8 +620,10 @@ function addMark(q) {
   if (!id) { toast('Type the damper ID first'); $('idIn').focus(); return; }
   pushUndo();
   const s = (Math.max(0.62, Math.min(1, cw / 560)) * S.sizeMul) / S.view.k;
-  const m = { id, note: '', color: S.color, style: S.style, x: q.x, y: q.y, bx: 0, by: 0, s };
-  const L = layout(m), gap = 70 * s;
+  const m = { id, note: '', color: S.color, ink: S.ink, style: S.style, x: q.x, y: q.y, bx: 0, by: 0, s };
+  const tidied = S.marks.find((o) => o.fw && (o.style || 'circle') === S.style); // after "Tidy labels", new labels match that size
+  if (tidied) { m.s = tidied.s; m.fw = tidied.fw; m.fh = tidied.fh; }
+  const L = layout(m), gap = 70 * m.s;
   // put the box above the spot if there is room on screen, otherwise below; keep it on the page
   const topVisible = toPage(0, 0).y, above = q.y - L.ry - gap - L.h;
   m.by = above >= Math.max(0, topVisible) ? above : q.y + L.ry + gap;
@@ -580,9 +642,11 @@ function syncPanel() {
   $('modeLbl').textContent = m ? 'Editing' : 'Next ID';
   $('idIn').value = m ? m.id : S.nextId;
   $('noteIn').value = m ? (m.note || '') : '';
-  $('editRow').hidden = $('editRow2').hidden = $('doneBtn').hidden = !m;
+  $('editRow').hidden = $('editRow2').hidden = $('doneBtn').hidden = !m; $('keepBtn').hidden = !!m; syncKeep();
   const cur = m ? m.color : S.color;
   [...$('chips').children].forEach((b) => b.classList.toggle('on', b.dataset.k === cur));
+  const ik = m ? (m.ink || 'black') : S.ink;
+  [...$('inks').children].forEach((b) => b.classList.toggle('on', b.dataset.k === ik));
   const st = m ? (m.style || 'circle') : S.style;
   [...$('styles').children].forEach((b) => b.classList.toggle('on', b.dataset.k === st));
   $('undoBtn').disabled = !S.undo.length;
@@ -591,7 +655,7 @@ function syncPanel() {
   const k = b.dataset.k;
   if (S.sel && (S.sel.style || 'circle') !== k) { // keep the label centered where it was
     pushUndo(); const m = S.sel, L0 = layout(m), cx = m.bx + L0.w / 2, cy = m.by + L0.h / 2;
-    m.style = k; const L1 = layout(m); m.bx = cx - L1.w / 2; m.by = cy - L1.h / 2;
+    m.style = k; delete m.fw; delete m.fh; const L1 = layout(m); m.bx = cx - L1.w / 2; m.by = cy - L1.h / 2;
   }
   S.style = k; syncPanel(); persist(); draw();
 }; });
@@ -599,6 +663,17 @@ COLORS.forEach((c) => {
   const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.dataset.k = c.key; b.textContent = c.name; b.style.background = c.fill;
   b.onclick = () => { if (S.sel) { pushUndo(); S.sel.color = c.key; } S.color = c.key; syncPanel(); persist(); draw(); };
   $('chips').appendChild(b);
+});
+INKS.forEach((c) => {
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'chip ink'; b.dataset.k = c.key;
+  const sw = document.createElement('i'); sw.style.background = c.c; b.appendChild(sw); b.appendChild(document.createTextNode(c.name));
+  b.onclick = () => {
+    // one label picked: change just that one. Nothing picked: change every label on this page, and the next ones.
+    const list = S.sel ? [S.sel] : S.marks;
+    if (list.some((m) => (m.ink || 'black') !== c.key)) { pushUndo(); list.forEach((m) => { m.ink = c.key; }); if (!S.sel) toast('Line color is now ' + c.name.toLowerCase() + ' on all ' + list.length + ' label' + (list.length > 1 ? 's' : '') + ' on this page'); }
+    if (!S.sel) S.ink = c.key; syncPanel(); persist(); draw();
+  };
+  $('inks').appendChild(b);
 });
 let typing = false;
 function typed(field, el) {
@@ -615,10 +690,106 @@ $('delBtn').onclick = () => { if (!S.sel) return; pushUndo(); S.marks = S.marks.
 function resizeSel(f) {
   const m = S.sel; if (!m) return; pushUndo();
   const L0 = layout(m), cx = m.bx + L0.w / 2, cy = m.by + L0.h / 2;
-  m.s *= f; const L1 = layout(m); m.bx = cx - L1.w / 2; m.by = cy - L1.h / 2;
+  m.s *= f; if (m.fw) { m.fw *= f; m.fh *= f; } const L1 = layout(m); m.bx = cx - L1.w / 2; m.by = cy - L1.h / 2;
   S.sizeMul = Math.max(0.4, Math.min(3, S.sizeMul * f)); persist(); draw();
 }
 $('smBtn').onclick = () => resizeSel(1 / 1.15); $('lgBtn').onclick = () => resizeSel(1.15);
+
+/* ---------- tidy labels ---------- */
+// Gives every label on the page the same box size, then moves each box close to its own spot so that no
+// boxes overlap, no box covers a spot, lines cross as little as possible, and boxes sit on blank parts of the plan.
+function inkMap() {
+  try {
+    const src = S.base, sw = src.naturalWidth || src.width, sh = src.naturalHeight || src.height;
+    const f = Math.min(1, 1000 / Math.max(sw, sh)), w = Math.max(1, Math.round(sw * f)), h = Math.max(1, Math.round(sh * f));
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g2 = c.getContext('2d'); g2.fillStyle = '#fff'; g2.fillRect(0, 0, w, h); g2.drawImage(src, 0, 0, w, h);
+    const d = g2.getImageData(0, 0, w, h).data, I = new Float64Array((w + 1) * (h + 1));
+    for (let y = 0; y < h; y++) {
+      let row = 0;
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        row += 1 - (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11) / 255;
+        I[(y + 1) * (w + 1) + x + 1] = I[y * (w + 1) + x + 1] + row;
+      }
+    }
+    const kx = w / S.W, ky = h / S.H;
+    return (r) => { // how dark the plan is under a box, 0 (blank) to 1 (solid black)
+      const x0 = Math.max(0, Math.min(w, Math.round(r.x0 * kx))), x1 = Math.max(0, Math.min(w, Math.round(r.x1 * kx)));
+      const y0 = Math.max(0, Math.min(h, Math.round(r.y0 * ky))), y1 = Math.max(0, Math.min(h, Math.round(r.y1 * ky)));
+      const a = (x1 - x0) * (y1 - y0); if (a <= 0) return 0;
+      const W1 = w + 1; return (I[y1 * W1 + x1] - I[y0 * W1 + x1] - I[y1 * W1 + x0] + I[y0 * W1 + x0]) / a;
+    };
+  } catch (e) { return () => 0; }
+}
+const rectsHit = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+const grow = (r, p) => ({ x0: r.x0 - p, y0: r.y0 - p, x1: r.x1 + p, y1: r.y1 + p });
+function segsCross(p1, p2, p3, p4) {
+  const d = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  const d1 = d(p3, p4, p1), d2 = d(p3, p4, p2), d3 = d(p1, p2, p3), d4 = d(p1, p2, p4);
+  return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+}
+function segHitsRect(a, b, r) {
+  if (Math.max(a.x, b.x) < r.x0 || Math.min(a.x, b.x) > r.x1 || Math.max(a.y, b.y) < r.y0 || Math.min(a.y, b.y) > r.y1) return false;
+  const inside = (p) => p.x > r.x0 && p.x < r.x1 && p.y > r.y0 && p.y < r.y1;
+  if (inside(a) || inside(b)) return true;
+  const c = [{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y0 }, { x: r.x1, y: r.y1 }, { x: r.x0, y: r.y1 }];
+  for (let i = 0; i < 4; i++) if (segsCross(a, b, c[i], c[(i + 1) % 4])) return true;
+  return false;
+}
+function tidy() {
+  const ms = S.marks;
+  if (!ms.length) { toast('Add some labels first, then tap Tidy labels'); return; }
+  pushUndo(); S.sel = null;
+  // 1. same size: the middle size of the labels on this page, and one box size that fits the longest ID
+  const ss = ms.map((m) => m.s).sort((a, b) => a - b), s = ss[Math.floor(ss.length / 2)];
+  for (const st of ['line', 'circle']) {
+    const grp = ms.filter((m) => (m.style === 'line' ? 'line' : 'circle') === st); if (!grp.length) continue;
+    let W = 0, H = 0;
+    for (const m of grp) { m.s = s; delete m.fw; delete m.fh; const L = layout(m); W = Math.max(W, L.w); H = Math.max(H, L.h); }
+    for (const m of grp) { m.fw = W; m.fh = H; }
+  }
+  // 2. place the boxes, the most crowded spots first so they get the closest places
+  const dark = inkMap();
+  const info = ms.map((m) => { const L = layout(m); return { m, L, spot: { x0: m.x - L.rx, y0: m.y - L.ry, x1: m.x + L.rx, y1: m.y + L.ry } }; });
+  const near = (a) => info.filter((b) => b !== a && Math.hypot(a.m.x - b.m.x, a.m.y - b.m.y) < 4 * a.L.w).length;
+  info.forEach((a) => { a.crowd = near(a); });
+  const order = info.slice().sort((a, b) => b.crowd - a.crowd || a.m.y - b.m.y || a.m.x - b.m.x);
+  const placed = []; // { box, a (line start), p (spot) }
+  const DIRS = 16;
+  for (const it of order) {
+    const { m, L } = it, W = L.w, H = L.h, gap = Math.max(H * 0.25, 6 * m.s);
+    let best = null;
+    for (let ring = 0; ring < 14; ring++) {
+      const d = L.ry + H * 0.6 + ring * H * 0.55;
+      for (let k = 0; k < DIRS; k++) {
+        const ang = (k / DIRS) * Math.PI * 2 - Math.PI / 2, cx = m.x + Math.cos(ang) * (W / 2 + d), cy = m.y + Math.sin(ang) * (H / 2 + d);
+        const box = { x0: cx - W / 2, y0: cy - H / 2, x1: cx + W / 2, y1: cy + H / 2 };
+        if (box.x0 < 2 * m.s || box.y0 < 2 * m.s || box.x1 > S.W - 2 * m.s || box.y1 > S.H - 2 * m.s) continue;
+        let score = d;
+        const gb = grow(box, gap);
+        for (const o of placed) if (rectsHit(gb, o.box)) score += 1e6;
+        for (const o of info) if (rectsHit(gb, o.spot)) score += 1e6;
+        if (score >= 1e6 && best && best.score < 1e6) continue;
+        m.bx = box.x0; m.by = box.y0; const a = leader(m, L).a, p = { x: m.x, y: m.y };
+        for (const o of placed) {
+          if (segsCross(a, p, o.a, o.p)) score += H * 2.5;
+          if (segHitsRect(a, p, grow(o.box, 2 * m.s))) score += 1e5;
+          if (segHitsRect(o.a, o.p, grow(box, 2 * m.s))) score += 1e5;
+        }
+        for (const o of info) if (o !== it && segHitsRect(a, p, o.spot)) score += H * 3;
+        score += dark(box) * H * 30;
+        if (!best || score < best.score) best = { score, box, a, p };
+      }
+      if (best && best.score < 1e5 && ring >= 2) break; // good enough, stay close
+    }
+    if (best) { m.bx = best.box.x0; m.by = best.box.y0; placed.push({ box: best.box, a: best.a, p: best.p }); }
+    else placed.push({ box: { x0: m.bx, y0: m.by, x1: m.bx + W, y1: m.by + H }, a: leader(m, L).a, p: { x: m.x, y: m.y } });
+  }
+  syncPanel(); persist(); draw();
+  toast('Tidied ' + ms.length + ' label' + (ms.length > 1 ? 's' : '') + '. Tap Undo to put them back.');
+}
+$('tidyBtn').onclick = tidy;
 
 /* ---------- saving the picture ---------- */
 let outBlob = null, outMode = 'view';

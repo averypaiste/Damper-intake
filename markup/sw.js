@@ -1,5 +1,5 @@
 // Keeps the markup tool available offline. Online: always fetch the newest files. Offline: use the saved copy.
-const CACHE = 'markup-v5';
+const CACHE = 'markup-v10';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'pdf-lib.min.js', '../beta/pdfjs/pdf.min.js', '../beta/pdfjs/pdf.worker.min.js'];
 
 self.addEventListener('install', (e) => {
