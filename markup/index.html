@@ -38,6 +38,11 @@
   .start { position: absolute; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; overflow: auto; }
   .start h2 { margin: 0; font-size: 22px; }
   .start p { margin: 0; color: var(--muted); max-width: 34ch; }
+  .tb { text-decoration: none; }
+  .jobmaps { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 440px; }
+  .jobmaps b { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .jobmaps button { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; text-align: left; font-weight: 700; overflow-wrap: anywhere; }
+  .jobmaps button span { display: block; font-weight: 500; color: var(--muted); font-size: 13px; }
   .big { background: var(--accent); color: #fff; border: 0; border-radius: 12px; padding: 16px 26px; font-size: 17px; font-weight: 700; }
   .steps { text-align: left; color: var(--ink); max-width: 36ch; padding-left: 20px; margin: 4px 0; }
   .steps li { margin: 4px 0; }
@@ -69,6 +74,7 @@
 </head>
 <body>
 <div class="top">
+  <a class="tb" id="backBtn" href="../beta/" hidden>‹ App</a>
   <button class="tb" id="openBtn" type="button">📂 Open</button>
   <h1 id="title">Damper Markup</h1>
   <button class="tb" id="pagesBtn" type="button" hidden>☰ Pages</button>
@@ -83,11 +89,13 @@
   <div class="start" id="start">
     <h2>Damper Markup</h2>
     <p>Put damper labels on a floor plan: a red circle on the spot, an arrow, and a colored box with the ID.</p>
+    <div class="jobmaps" id="jobMaps" hidden></div>
     <button class="big" id="bigOpen" type="button">Open a PDF or picture</button>
+    <button class="sb" id="cancelStart" type="button" hidden>Cancel</button>
     <ol class="steps">
       <li>Open the floor plan PDF (or a screenshot).</li>
       <li>Zoom in, type the damper ID, and tap its spot.</li>
-      <li>Drag the box where you want it, pick the color, then Save picture.</li>
+      <li>Drag the box where you want it, pick the color, then Save.</li>
     </ol>
     <div class="ver" id="ver"></div>
   </div>
@@ -134,7 +142,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = '2026-11-16-c';
+const APP_VERSION = '2026-11-16-d';
 const $ = (id) => document.getElementById(id);
 $('ver').textContent = 'Version ' + APP_VERSION + ' · works offline once opened · nothing is uploaded';
 
@@ -197,7 +205,34 @@ function pdfLib() {
     document.head.appendChild(sc);
   }));
 }
-$('openBtn').onclick = $('bigOpen').onclick = () => $('file').click();
+$('bigOpen').onclick = () => $('file').click();
+$('openBtn').onclick = () => { if (jobMaps().length) showStart(); else $('file').click(); };
+$('cancelStart').onclick = () => { $('start').hidden = true; };
+/* Maps the inspection app already saved for the job (handed over by its Markup button). They are read
+   straight from this device's saved copies, so there is nothing to download or import again. */
+const HO = lsGet('markupHandoff');
+const jobMaps = () => (HO && Array.isArray(HO.maps) ? HO.maps : []);
+function showStart() {
+  const box = $('jobMaps'), maps = jobMaps(); box.textContent = ''; box.hidden = !maps.length;
+  if (maps.length) {
+    const t = document.createElement('b'); t.textContent = 'Saved maps for ' + (HO.job || 'this job'); box.appendChild(t);
+    for (const m of maps) {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = m.fn;
+      const sp = document.createElement('span'); sp.textContent = m.note || 'Saved on this device'; b.appendChild(sp);
+      b.onclick = () => openJobMap(m); box.appendChild(b);
+    }
+  }
+  $('bigOpen').textContent = maps.length ? 'Open a different PDF or picture' : 'Open a PDF or picture';
+  $('cancelStart').hidden = !S.doc; $('start').hidden = false;
+}
+async function openJobMap(m) {
+  try {
+    const c = await caches.open(m.cache), r = await c.match(m.key);
+    if (!r) { toast('That map is not saved on this device any more. Open the job in the inspection app with signal, then try again.'); return; }
+    const b = await r.blob();
+    await openFile(new File([b], m.fn, { type: m.type || b.type }), true);
+  } catch (e) { toast('Could not open the saved map.'); }
+}
 $('file').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) openFile(f, true); };
 document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) openFile(f, true); });
@@ -221,7 +256,7 @@ async function openFile(file, remember) {
     S.nextId = S.store.nextId || ''; S.color = S.store.color || 'pink'; S.sizeMul = S.store.sizeMul || 1;
     if (remember) idbSet('last', { blob: file, name, type: file.type });
     $('title').textContent = name;
-    $('start').hidden = true;
+    $('start').hidden = true; $('pages').hidden = true;
     $('pagesBtn').hidden = doc.n < 2;
     const hasMarks = S.store.pages && Object.keys(S.store.pages).length;
     if (doc.n > 1 && !(hasMarks && S.store.page)) { hint(''); showPages(); }
@@ -644,7 +679,11 @@ $('dlBtn').onclick = () => { if (!outBlob) return; const a = document.createElem
 
 /* ---------- start ---------- */
 resize();
-idbGet('last').then((v) => { if (v && v.blob && !S.doc) { const f = v.blob instanceof File ? v.blob : new File([v.blob], v.name || 'plan', { type: v.type || '' }); openFile(f, false); } });
+$('backBtn').hidden = !HO;
+showStart();
+const fromApp = location.hash === '#job' && jobMaps().length;
+if (fromApp && jobMaps().length === 1) openJobMap(jobMaps()[0]);
+if (!fromApp) idbGet('last').then((v) => { if (v && v.blob && !S.doc) { const f = v.blob instanceof File ? v.blob : new File([v.blob], v.name || 'plan', { type: v.type || '' }); openFile(f, false); } });
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
