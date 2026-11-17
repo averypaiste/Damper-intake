@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.airtable.com https://*.airtableusercontent.com; connect-src 'self' blob: data: https://*.airtable.com https://*.airtableusercontent.com; worker-src 'self' blob:; manifest-src 'self'; font-src 'self' data:; media-src 'self' blob: data:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<meta name="viewport" id="vp" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" id="vp" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0e7c74">
 <link rel="manifest" href="manifest.webmanifest">
 <title>Damper Inspection (test)</title>
@@ -88,7 +88,6 @@
   .pending { color:var(--warn); } .synced { color:var(--ok); } .error { color:var(--err); }
   dialog { border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--ink); max-width:480px; width:92%; }
   dialog::backdrop { background:rgba(0,0,0,.5); }
-  html, body { touch-action:manipulation; } /* no double-tap zoom */
   #lockDlg, #lockPad button { touch-action:manipulation; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
 
   /* passcode lock */
@@ -904,24 +903,24 @@ async function showInfo(label) {
 }
 
 // Full-size photo viewer, shown above whatever page is open. Falls back to the saved preview when offline.
-/* Pages don't zoom (no pinch, no double tap, no zoom when typing). Only a full-size photo can be pinched. */
+/* Only the passcode screen is kept from zooming (tapping 99 used to zoom in). Every other page zooms as normal. */
+const VP_FREE = 'width=device-width, initial-scale=1, viewport-fit=cover';
 const VP_LOCK = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
-let photoZoom = false;
-function allowZoom(on) {
-  photoZoom = on;
-  const vp = document.getElementById('vp'); if (!vp) return;
-  if (on) vp.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=6, user-scalable=yes, viewport-fit=cover');
-  else { vp.setAttribute('content', VP_LOCK + ', minimum-scale=1'); setTimeout(() => vp.setAttribute('content', VP_LOCK), 300); } // snap back to normal size
+let noZoom = false;
+function lockZoom(on) {
+  noZoom = on; const vp = document.getElementById('vp'); if (!vp) return;
+  if (on) vp.setAttribute('content', VP_LOCK + ', minimum-scale=1'); // also snaps back to normal size
+  else vp.setAttribute('content', VP_FREE);
 }
-// iPhone ignores user-scalable=no, so stop its pinch gesture here too (except on a full-size photo)
-for (const ev of ['gesturestart', 'gesturechange']) document.addEventListener(ev, (e) => { if (!photoZoom) e.preventDefault(); }, { passive: false });
+// iPhone ignores user-scalable=no, so also stop its pinch gesture while the passcode screen is up
+for (const ev of ['gesturestart', 'gesturechange']) document.addEventListener(ev, (e) => { if (noZoom) e.preventDefault(); }, { passive: false });
 function viewPhoto(url, fallback) {
   const v = $('viewer'), im = $('viewerImg');
   im.onerror = () => { im.onerror = null; if (fallback && im.src !== fallback) im.src = fallback; };
-  im.src = url; v.showModal(); allowZoom(true);
+  im.src = url; v.showModal();
 }
 $('viewer').addEventListener('click', () => $('viewer').close());
-$('viewer').addEventListener('close', () => { $('viewerImg').removeAttribute('src'); allowZoom(false); });
+$('viewer').addEventListener('close', () => { $('viewerImg').removeAttribute('src'); });
 
 // Photos are saved on the device (medium-size previews) so they can be seen offline too
 const PKEY = 'https://local.invalid/photo/';
@@ -989,7 +988,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-17-c (test copy)';
+const APP_VERSION = '2026-11-17-d (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -2993,12 +2992,12 @@ function applyKeeps() {
   const im = document.createElement('img'); im.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain';
   const x = document.createElement('button'); x.type = 'button'; x.textContent = '✕ Close'; x.style.cssText = 'position:absolute;top:max(12px,env(safe-area-inset-top));right:12px;background:#fff;color:#000;border:0;border-radius:99px;padding:8px 14px;font-weight:600';
   ov.append(im, x); document.body.append(ov);
-  const hide = () => { ov.style.display = 'none'; im.removeAttribute('src'); allowZoom(false); };
+  const hide = () => { ov.style.display = 'none'; im.removeAttribute('src'); };
   ov.onclick = hide;
   document.addEventListener('click', (e) => {
     const t = e.target;
     if (t.tagName !== 'IMG' || ov.contains(t) || !t.closest('#photoBlocks, .pblock, #detailBody')) return;
-    if (!t.src) return; e.preventDefault(); im.src = t.dataset.full || t.src; ov.style.display = 'flex'; allowZoom(true);
+    if (!t.src) return; e.preventDefault(); im.src = t.dataset.full || t.src; ov.style.display = 'flex';
   });
 })();
 let pendingPhotos = {}; // { fieldName: [{blob, url}] }
@@ -3798,10 +3797,10 @@ function lockOpen(mode) {
   $('lockForgot').hidden = mode === 'setup'; $('lockForgot').textContent = mode === 'change' ? 'Cancel' : 'Forgot passcode?';
   $('lockBio').hidden = !(mode === 'unlock' && L && L.cred);
   $('lockBio').textContent = 'Use ' + lkBioName();
-  const d = $('lockDlg'); if (!d.open) d.showModal(); lockShown = true;
+  const d = $('lockDlg'); if (!d.open) d.showModal(); lockShown = true; lockZoom(true);
   if (mode === 'unlock' && L && L.cred && document.visibilityState === 'visible') lkBioUnlock(true);
 }
-function lockDone() { lockShown = false; lkSeen(); const d = $('lockDlg'); if (d.open) d.close(); }
+function lockDone() { lockShown = false; lockZoom(false); lkSeen(); const d = $('lockDlg'); if (d.open) d.close(); }
 async function lockDigit(n) {
   if (lockBusy) return;
   const L = lockGet();
@@ -3863,8 +3862,8 @@ async function lockSettings() {
   }
 })();
 document.addEventListener('keydown', (e) => { if (!lockShown) return; if (/^[0-9]$/.test(e.key)) lockDigit(e.key); else if (e.key === 'Backspace') { lockEntry = lockEntry.slice(0, -1); lockRender(); } });
-$('lockDlg').addEventListener('cancel', (e) => { if (lockMode !== 'change') e.preventDefault(); else lockShown = false; }); // Esc can't skip the lock
-$('lockDlg').addEventListener('close', () => { if (lockShown) { if (lockMode === 'change') lockShown = false; else $('lockDlg').showModal(); } }); // some browsers close it anyway: open it again
+$('lockDlg').addEventListener('cancel', (e) => { if (lockMode !== 'change') e.preventDefault(); else { lockShown = false; lockZoom(false); } }); // Esc can't skip the lock
+$('lockDlg').addEventListener('close', () => { if (lockShown) { if (lockMode === 'change') { lockShown = false; lockZoom(false); } else $('lockDlg').showModal(); } }); // some browsers close it anyway: open it again
 $('lockBio').onclick = () => lkBioUnlock(false);
 $('lockForgot').onclick = () => {
   if (lockMode === 'change') { lockDone(); return; }
