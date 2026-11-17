@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.airtable.com https://*.airtableusercontent.com; connect-src 'self' blob: data: https://*.airtable.com https://*.airtableusercontent.com; worker-src 'self' blob:; manifest-src 'self'; font-src 'self' data:; media-src 'self' blob: data:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Damper Markup</title>
 <link rel="manifest" href="manifest.webmanifest">
@@ -147,7 +149,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = '2026-11-16-e';
+const APP_VERSION = '2026-11-17-a';
 const $ = (id) => document.getElementById(id);
 $('ver').textContent = 'Version ' + APP_VERSION + ' · works offline once opened · nothing is uploaded';
 
@@ -251,7 +253,7 @@ async function openFile(file, remember) {
     if (isPdf) {
       const L = await pdfLib();
       const buf = await file.arrayBuffer(); doc.bytes = buf.slice(0);
-      doc.pdf = await L.getDocument({ data: new Uint8Array(buf) }).promise;
+      doc.pdf = await L.getDocument({ isEvalSupported: false, data: new Uint8Array(buf) }).promise;
       doc.n = doc.pdf.numPages;
     } else {
       doc.img = await loadImg(file);
