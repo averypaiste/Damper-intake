@@ -67,6 +67,7 @@
   .pg .ph { background: #fff; }
   .pg .cap { padding: 8px 12px; font-weight: 700; border-top: 1px solid var(--line); display: flex; justify-content: space-between; }
   .pg .cap span { color: var(--muted); font-weight: 500; }
+  .verfoot { position: absolute; right: 8px; bottom: 4px; z-index: 3; font-size: 10px; color: #4a5260; background: rgba(255,255,255,.7); padding: 1px 6px; border-radius: 6px; pointer-events: none; }
   .pfind { position: sticky; top: -12px; z-index: 2; flex: none; width: calc(100% + 24px); max-width: 784px; margin: -12px -12px 0; padding: 10px 12px; background: var(--bg); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
   .pfind form { display: flex; gap: 8px; }
   .pfind input { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); }
@@ -107,6 +108,7 @@
   <canvas id="cv"></canvas>
   <div class="hint" id="hint" hidden></div>
   <div class="pages" id="pages" hidden></div>
+  <div class="verfoot" id="verFoot"></div>
   <div class="start" id="start">
     <h2>Damper Markup</h2>
     <p>Put damper labels on a floor plan: a red circle on the spot, an arrow, and a colored box with the ID.</p>
@@ -173,8 +175,9 @@
 
 <script>
 'use strict';
-const APP_VERSION = '2026-11-17-f';
+const APP_VERSION = '2026-11-17-g';
 const $ = (id) => document.getElementById(id);
+$('verFoot').textContent = 'Markup v' + APP_VERSION;
 $('ver').textContent = 'Version ' + APP_VERSION + ' · works offline once opened · nothing is uploaded';
 
 const COLORS = [
