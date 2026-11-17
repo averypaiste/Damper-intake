@@ -187,6 +187,7 @@
   #hCount { position:absolute; right:12px; top:50%; transform:translateY(-50%); font-size:13px; color:var(--muted); pointer-events:none; white-space:nowrap; }
   #btnNew { position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom)); z-index:6; border-radius:99px; padding:13px 20px; font-weight:700; font-size:15px; box-shadow:0 4px 14px rgba(0,0,0,.28); }
   main { padding-bottom:80px; }
+  .verfoot { text-align:center; font-size:11px; color:var(--muted); margin:18px 0 0; }
   .gfull { white-space:normal !important; flex-wrap:wrap; align-content:center; padding-top:6px !important; padding-bottom:6px !important; }
   .gfull .chip { white-space:normal; text-align:left; border-radius:12px; line-height:1.3; max-width:100%; overflow:visible; }
   .gnote { white-space:normal !important; align-items:flex-start !important; flex-direction:column; justify-content:center; }
@@ -457,6 +458,7 @@
     </div>
     <div id="navBar"><button type="button" id="navPrev" aria-label="Previous damper">‹</button><span id="navPos"></span><button type="button" id="navNext" aria-label="Next damper">›</button></div>
   </dialog>
+  <p class="verfoot" id="verFoot"></p>
 </main>
 
 <dialog id="offDlg">
@@ -988,7 +990,8 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-17-d (test copy)';
+const APP_VERSION = '2026-11-17-e (test copy)';
+try { document.getElementById('verFoot').textContent = 'Damper Inspection · version ' + APP_VERSION; } catch {}
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
