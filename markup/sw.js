@@ -1,0 +1,26 @@
+// Keeps the markup tool available offline. Online: always fetch the newest files. Offline: use the saved copy.
+const CACHE = 'markup-v1';
+const SHELL = ['./', 'index.html', 'manifest.webmanifest', '../beta/pdfjs/pdf.min.js', '../beta/pdfjs/pdf.worker.min.js'];
+
+self.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => /^markup-v\d+$/.test(k) && k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
+  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  e.respondWith(
+    fetch(req.url, { cache: 'no-cache' }).then((res) => {
+      if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
+      return res;
+    }).catch(() => caches.match(req).then((hit) => hit || caches.match('index.html')))
+  );
+});
