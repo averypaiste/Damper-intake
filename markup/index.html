@@ -67,6 +67,14 @@
   .pg .ph { background: #fff; }
   .pg .cap { padding: 8px 12px; font-weight: 700; border-top: 1px solid var(--line); display: flex; justify-content: space-between; }
   .pg .cap span { color: var(--muted); font-weight: 500; }
+  .pfind { position: sticky; top: -12px; z-index: 2; flex: none; width: calc(100% + 24px); max-width: 784px; margin: -12px -12px 0; padding: 10px 12px; background: var(--bg); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+  .pfind form { display: flex; gap: 8px; }
+  .pfind input { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); }
+  .pfind input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .pfind button { border: 0; border-radius: 10px; background: var(--accent); color: #fff; font-weight: 700; padding: 10px 16px; flex: none; }
+  .pfind .res { display: flex; flex-wrap: wrap; gap: 6px; font-size: 13px; color: var(--muted); align-items: center; }
+  .pfind .res button { background: #fff; color: var(--ink); border: 1px solid var(--line); padding: 6px 10px; font-size: 13px; border-radius: 8px; }
+  .pg.flash { box-shadow: 0 0 0 4px var(--accent); }
   /* save sheet */
   .sheet { position: fixed; inset: 0; background: rgba(15,20,30,.6); display: flex; align-items: flex-end; justify-content: center; z-index: 20; }
   .sheet .box { background: #fff; width: 100%; max-width: 640px; max-height: 92%; border-radius: 14px 14px 0 0; padding: 14px max(14px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 10px; }
@@ -165,7 +173,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = '2026-11-17-e';
+const APP_VERSION = '2026-11-17-f';
 const $ = (id) => document.getElementById(id);
 $('ver').textContent = 'Version ' + APP_VERSION + ' · works offline once opened · nothing is uploaded';
 
@@ -340,6 +348,7 @@ function showPages() {
     hd.querySelector('button').onclick = () => $('saveBtn').onclick();
     box.appendChild(hd);
   }
+  box.insertBefore(findBar(), box.firstChild);
   for (let i = 1; i <= S.doc.n; i++) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'pg'; b.dataset.n = i;
     const cnt = ((S.store.pages || {})[i] || []).length;
@@ -348,6 +357,50 @@ function showPages() {
     box.appendChild(b); pagesObs.observe(b);
   }
   const cur = box.querySelector('[data-n="' + S.pageNo + '"]'); if (cur && S.page) cur.scrollIntoView();
+}
+/* Find a page: a number opens that page; anything else (a sheet number like M-301, a room, a floor)
+   is looked up in the PDF's own text and the matching pages are listed. */
+const pageText = {};
+async function textOf(n) {
+  if (pageText[n] != null) return pageText[n];
+  try { const tc = await (await S.doc.pdf.getPage(n)).getTextContent(); pageText[n] = tc.items.map((i) => i.str).join(' '); }
+  catch (e) { pageText[n] = ''; }
+  return pageText[n];
+}
+function findBar() {
+  const w = document.createElement('div'); w.className = 'pfind';
+  w.innerHTML = '<form><input id="pfIn" type="search" inputmode="search" autocomplete="off" enterkeyhint="go"><button type="submit">Go</button></form><div class="res" id="pfRes"></div>';
+  const inp = w.querySelector('input'), res = w.querySelector('.res');
+  inp.placeholder = 'Page # (1–' + S.doc.n + ') or sheet / room name';
+  inp.setAttribute('aria-label', 'Find a page');
+  let run = 0;
+  w.querySelector('form').onsubmit = async (e) => {
+    e.preventDefault(); const q = inp.value.trim(); res.textContent = ''; if (!q) return;
+    if (/^\d+$/.test(q)) {
+      const n = parseInt(q, 10);
+      if (n < 1 || n > S.doc.n) { res.textContent = 'This PDF has pages 1 to ' + S.doc.n + '.'; return; }
+      inp.blur(); $('pages').hidden = true; openPage(n); return;
+    }
+    const my = ++run, needle = q.toLowerCase().replace(/\s+/g, ' '), hits = [];
+    res.textContent = 'Searching…';
+    for (let i = 1; i <= S.doc.n; i++) {
+      const t = (await textOf(i)).toLowerCase().replace(/\s+/g, ' ');
+      if (my !== run) return;
+      if (t.includes(needle)) hits.push(i);
+      if (i % 5 === 0) res.textContent = 'Searching… page ' + i + ' of ' + S.doc.n;
+    }
+    res.textContent = '';
+    if (!hits.length) { res.textContent = 'No page mentions "' + q + '". Try a page number.'; return; }
+    const lab = document.createElement('span'); lab.textContent = hits.length + ' page' + (hits.length > 1 ? 's' : '') + ':'; res.appendChild(lab);
+    for (const n of hits.slice(0, 40)) {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Page ' + n;
+      b.onclick = () => { const card = $('pages').querySelector('.pg[data-n="' + n + '"]'); if (!card) return; card.scrollIntoView({ block: 'center' }); card.classList.add('flash'); setTimeout(() => card.classList.remove('flash'), 1400); };
+      res.appendChild(b);
+    }
+  };
+  if (S.doc.kind !== 'pdf') w.hidden = true;
+  if (matchMedia('(pointer: fine)').matches) setTimeout(() => inp.focus({ preventScroll: true }), 0);
+  return w;
 }
 async function drawThumb(b) {
   try {
