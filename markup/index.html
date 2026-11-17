@@ -44,7 +44,7 @@
   .ver { font-size: 12px; color: var(--muted); }
   /* page list */
   .pages { position: absolute; inset: 0; background: var(--bg); overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px; display: flex; flex-direction: column; gap: 14px; align-items: center; }
-  .pg { width: 100%; max-width: 760px; background: #fff; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; padding: 0; text-align: left; }
+  .pg { flex: none; width: 100%; max-width: 760px; background: #fff; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; padding: 0; text-align: left; }
   .pg canvas { display: block; width: 100%; height: auto; }
   .pg .ph { background: #fff; }
   .pg .cap { padding: 8px 12px; font-weight: 700; border-top: 1px solid var(--line); display: flex; justify-content: space-between; }
@@ -134,7 +134,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = '2026-11-16-b';
+const APP_VERSION = '2026-11-16-c';
 const $ = (id) => document.getElementById(id);
 $('ver').textContent = 'Version ' + APP_VERSION + ' · works offline once opened · nothing is uploaded';
 
