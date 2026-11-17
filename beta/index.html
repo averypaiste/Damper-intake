@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.airtable.com https://*.airtableusercontent.com; connect-src 'self' blob: data: https://*.airtable.com https://*.airtableusercontent.com; worker-src 'self' blob:; manifest-src 'self'; font-src 'self' data:; media-src 'self' blob: data:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0e7c74">
 <link rel="manifest" href="manifest.webmanifest">
@@ -939,7 +941,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-16-a (test copy)';
+const APP_VERSION = '2026-11-17-a (test copy)';
 let quietRetry = false;
 function report(msg, manual) {
   // a busy or briefly unavailable Airtable (429 / 5xx): try once more in a few seconds before saying anything
@@ -2504,7 +2506,7 @@ async function locMarkup(file) {
     if (!/pdf/i.test(m.type) && !/\.pdf$/i.test(m.fn)) { await fromFile(blob); return; }
     try {
       const L = await loadPdfJs();
-      doc = await L.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+      doc = await L.getDocument({ isEvalSupported: false, data: new Uint8Array(await blob.arrayBuffer()) }).promise;
       pg.textContent = 'Finding floor ' + (who.fl || '') + '…';
       const n = doc.numPages > 1 ? await bestPage(doc, who) : 1;
       if (n) await showPage(n); else showList(0);
