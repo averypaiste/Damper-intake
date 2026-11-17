@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.airtable.com https://*.airtableusercontent.com; connect-src 'self' blob: data: https://*.airtable.com https://*.airtableusercontent.com; worker-src 'self' blob:; manifest-src 'self'; font-src 'self' data:; media-src 'self' blob: data:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Damper Markup</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1f2733">
@@ -165,10 +165,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = '2026-11-17-d';
-// the page itself never zooms (the plan has its own pinch zoom): stop iPhone's page pinch and double-tap zoom
-for (const ev of ['gesturestart', 'gesturechange']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
-document.documentElement.style.touchAction = 'manipulation';
+const APP_VERSION = '2026-11-17-e';
 const $ = (id) => document.getElementById(id);
 $('ver').textContent = 'Version ' + APP_VERSION + ' · works offline once opened · nothing is uploaded';
 
