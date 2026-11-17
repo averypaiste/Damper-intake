@@ -31,6 +31,7 @@
   .chips { display: flex; gap: 6px; flex: 1; min-width: 0; overflow-x: auto; padding: 2px; }
   .chip { flex: none; border: 2px solid #000; border-radius: 6px; padding: 6px 10px; font-size: 13px; font-weight: 700; color: #000; opacity: .55; }
   .chip.on { opacity: 1; box-shadow: 0 0 0 3px var(--accent); }
+  .chip.st { background: #fff; border-width: 1px; border-color: var(--line); }
   .sb { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 8px 12px; font-weight: 600; flex: none; }
   .sb.del { color: #b42318; border-color: #f3c1bc; }
   .sb.done { background: var(--accent); color: #fff; border-color: var(--accent); margin-left: auto; }
@@ -108,6 +109,10 @@
     <button class="sb done" id="doneBtn" type="button" hidden>Done</button>
   </div>
   <div class="row">
+    <div class="lbl">Style</div>
+    <div class="chips" id="styles"><button type="button" class="chip st" data-k="line">▪ Square + line</button><button type="button" class="chip st" data-k="circle">◯ Circle + arrow</button></div>
+  </div>
+  <div class="row">
     <div class="lbl">Color</div>
     <div class="chips" id="chips"></div>
   </div>
@@ -142,7 +147,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = '2026-11-16-d';
+const APP_VERSION = '2026-11-16-e';
 const $ = (id) => document.getElementById(id);
 $('ver').textContent = 'Version ' + APP_VERSION + ' · works offline once opened · nothing is uploaded';
 
@@ -165,7 +170,7 @@ const S = {
   detail: null, detailView: null, detailTask: null, detailTimer: 0,
   view: { k: 1, tx: 0, ty: 0 },        // page units -> CSS pixels
   marks: [], sel: null, undo: [],
-  nextId: '', color: 'pink', sizeMul: 1,
+  nextId: '', color: 'pink', sizeMul: 1, style: 'line',
   store: {},                           // saved marks for this file: { pages:{n:[...]}, nextId, color, sizeMul }
 };
 const cv = $('cv'), ctx = cv.getContext('2d');
@@ -182,7 +187,7 @@ function persist() {
   if (!S.doc) return;
   S.store.pages = S.store.pages || {};
   if (S.marks.length) S.store.pages[S.pageNo] = S.marks; else delete S.store.pages[S.pageNo];
-  S.store.nextId = S.nextId; S.store.color = S.color; S.store.sizeMul = S.sizeMul; S.store.page = S.pageNo;
+  S.store.nextId = S.nextId; S.store.color = S.color; S.store.sizeMul = S.sizeMul; S.store.style = S.style; S.store.page = S.pageNo;
   lsSet('markup:' + S.doc.key, S.store);
 }
 function idb() {
@@ -253,7 +258,7 @@ async function openFile(file, remember) {
     }
     S.doc = doc;
     S.store = lsGet('markup:' + doc.key) || {};
-    S.nextId = S.store.nextId || ''; S.color = S.store.color || 'pink'; S.sizeMul = S.store.sizeMul || 1;
+    S.nextId = S.store.nextId || ''; S.color = S.store.color || 'pink'; S.sizeMul = S.store.sizeMul || 1; S.style = S.store.style || 'line';
     if (remember) idbSet('last', { blob: file, name, type: file.type });
     $('title').textContent = name;
     $('start').hidden = true; $('pages').hidden = true;
@@ -338,24 +343,28 @@ new ResizeObserver(() => { if (!S.page) return; const oc = { x: cw / 2, y: ch / 
 
 /* ---------- geometry of one markup ---------- */
 // A mark: { id, note, color, x, y (spot), bx, by (box top-left), s (size) } in page units.
+const isLine = (m) => m.style === 'line'; // small label + thin line + square on the spot (older marks are circle + arrow)
 function layout(m) {
-  const s = m.s, pad = 6 * s;
-  mctx.font = 'bold ' + (25 * s) + 'px ' + FONT;
+  const s = m.s, line = isLine(m), pad = (line ? 7 : 6) * s, fs = (line ? 20 : 25) * s, nfs = (line ? 16 : 19) * s, lh = nfs * 1.2;
+  mctx.font = 'bold ' + fs + 'px ' + FONT;
   const idW = mctx.measureText(m.id || ' ').width;
-  let w = Math.max(205 * s, idW + pad * 2 + 4 * s);
+  let w = line ? idW + pad * 2 : Math.max(205 * s, idW + pad * 2 + 4 * s);
   const lines = [];
   if (m.note) {
-    mctx.font = (19 * s) + 'px ' + FONT;
+    mctx.font = nfs + 'px ' + FONT;
+    const maxW = Math.max(w, 150 * s) - pad * 2;
     let cur = '';
     for (const word of String(m.note).split(/\s+/)) {
       const t = cur ? cur + ' ' + word : word;
-      if (cur && mctx.measureText(t).width > w - pad * 2) { lines.push(cur); cur = word; } else cur = t;
+      if (cur && mctx.measureText(t).width > maxW) { lines.push(cur); cur = word; } else cur = t;
     }
     if (cur) lines.push(cur);
     for (const l of lines) w = Math.max(w, mctx.measureText(l).width + pad * 2);
   }
-  const h = Math.max(100 * s, 4 * s + 30 * s + lines.length * 23 * s + pad);
-  return { w, h, lines, rx: 36 * s, ry: 26 * s };
+  const top = (line ? 4 : 5) * s, noteY = top + fs * 1.22;
+  const h = line ? noteY + lines.length * lh + (lines.length ? 4 : 1) * s : Math.max(100 * s, noteY + lines.length * lh + pad);
+  const r = line ? 9 * s : 0;
+  return { w, h, lines, rx: line ? r : 36 * s, ry: line ? r : 26 * s, pad, fs, nfs, lh, top, noteY, line };
 }
 function leader(m, L) {
   const s = m.s, cx = m.bx + L.w / 2, cy = m.by + L.h / 2, dx = m.x - cx, dy = m.y - cy;
@@ -369,25 +378,32 @@ function leader(m, L) {
   return { a, b, e, ang, ok };
 }
 function drawMark(c, m, selected) {
-  const s = m.s, L = layout(m);
+  const s = m.s, L = layout(m), fill = fillOf(m.color);
   c.lineCap = 'butt'; c.lineJoin = 'miter';
-  // red oval on the spot
-  c.strokeStyle = RED; c.lineWidth = 4 * s;
-  c.beginPath(); c.ellipse(m.x, m.y, L.rx, L.ry, 0, 0, Math.PI * 2); c.stroke();
-  // arrow
   const G = leader(m, L);
-  if (G.ok) {
-    c.strokeStyle = '#000'; c.lineWidth = 3 * s; c.lineCap = 'round';
-    c.beginPath(); c.moveTo(G.a.x, G.a.y); c.lineTo(G.b.x, G.b.y); c.lineTo(G.e.x, G.e.y); c.stroke();
-    for (const d of [0.38, -0.38]) { c.beginPath(); c.moveTo(G.e.x, G.e.y); c.lineTo(G.e.x - 26 * s * Math.cos(G.ang + d), G.e.y - 26 * s * Math.sin(G.ang + d)); c.stroke(); }
+  if (L.line) {
+    // thin line from the label to the spot, then a small square in the label's color on the spot
+    c.strokeStyle = '#000'; c.lineWidth = 1.6 * s; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(G.a.x, G.a.y); c.lineTo(m.x, m.y); c.stroke();
+    c.lineCap = 'butt'; c.fillStyle = fill; c.lineWidth = 1.4 * s;
+    c.beginPath(); c.rect(m.x - L.rx * 0.72, m.y - L.ry * 0.72, L.rx * 1.44, L.ry * 1.44); c.fill(); c.stroke();
+  } else {
+    // red oval on the spot, arrow with a short stub off the box
+    c.strokeStyle = RED; c.lineWidth = 4 * s;
+    c.beginPath(); c.ellipse(m.x, m.y, L.rx, L.ry, 0, 0, Math.PI * 2); c.stroke();
+    if (G.ok) {
+      c.strokeStyle = '#000'; c.lineWidth = 3 * s; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(G.a.x, G.a.y); c.lineTo(G.b.x, G.b.y); c.lineTo(G.e.x, G.e.y); c.stroke();
+      for (const d of [0.38, -0.38]) { c.beginPath(); c.moveTo(G.e.x, G.e.y); c.lineTo(G.e.x - 26 * s * Math.cos(G.ang + d), G.e.y - 26 * s * Math.sin(G.ang + d)); c.stroke(); }
+    }
   }
   // box
-  c.fillStyle = fillOf(m.color); c.strokeStyle = '#000'; c.lineWidth = 3 * s; c.lineCap = 'butt';
+  c.fillStyle = fill; c.strokeStyle = '#000'; c.lineWidth = (L.line ? 2 : 3) * s; c.lineCap = 'butt';
   c.beginPath(); c.rect(m.bx, m.by, L.w, L.h); c.fill(); c.stroke();
   c.fillStyle = '#000'; c.textBaseline = 'top'; c.textAlign = 'left';
-  c.font = 'bold ' + (25 * s) + 'px ' + FONT; c.fillText(m.id || '', m.bx + 6 * s, m.by + 5 * s);
-  c.font = (19 * s) + 'px ' + FONT;
-  L.lines.forEach((l, i) => c.fillText(l, m.bx + 6 * s, m.by + 36 * s + i * 23 * s));
+  c.font = 'bold ' + L.fs + 'px ' + FONT; c.fillText(m.id || '', m.bx + L.pad, m.by + L.top);
+  c.font = L.nfs + 'px ' + FONT;
+  L.lines.forEach((l, i) => c.fillText(l, m.bx + L.pad, m.by + L.noteY + i * L.lh));
   if (selected) {
     c.save(); c.strokeStyle = '#166ee1'; c.lineWidth = 2.5 * s; c.setLineDash([8 * s, 6 * s]);
     c.strokeRect(m.bx - 6 * s, m.by - 6 * s, L.w + 12 * s, L.h + 12 * s);
@@ -399,7 +415,8 @@ function hit(px, py) {
   for (let i = S.marks.length - 1; i >= 0; i--) {
     const m = S.marks[i], L = layout(m);
     if (px >= m.bx - slop && px <= m.bx + L.w + slop && py >= m.by - slop && py <= m.by + L.h + slop) return { m, part: 'box' };
-    const ex = (px - m.x) / (L.rx + slop), ey = (py - m.y) / (L.ry + slop);
+    const sp = L.line ? Math.max(slop, 16 / S.view.k - L.rx) : slop;
+    const ex = (px - m.x) / (L.rx + sp), ey = (py - m.y) / (L.ry + sp);
     if (ex * ex + ey * ey <= 1) return { m, part: 'spot' };
   }
   return null;
@@ -480,9 +497,29 @@ cv.addEventListener('pointermove', (e) => {
   if (g.hit) {
     const m = g.hit.m, k = S.view.k;
     if (g.hit.part === 'box') { m.bx += dx / k; m.by += dy / k; } else { m.x += dx / k; m.y += dy / k; }
+    edgePan();
   } else { S.view.tx += dx; S.view.ty += dy; clampView(); cancelDetail(); }
   g.last = p; draw();
 });
+// While a label or spot is held near the edge of the screen, the plan slides so it can be dragged further out.
+let edgeRaf = 0;
+function edgePan() {
+  if (edgeRaf) return;
+  const step = () => {
+    edgeRaf = 0;
+    if (!g || !g.hit || !g.moved || g.pinch || pts.size !== 1) return;
+    const p = g.last, E = 44, sp = (d) => Math.min(14, (E - d) * 0.4);
+    let vx = 0, vy = 0;
+    if (p.x < E) vx = sp(p.x); else if (p.x > cw - E) vx = -sp(cw - p.x);
+    if (p.y < E) vy = sp(p.y); else if (p.y > ch - E) vy = -sp(ch - p.y);
+    if (!vx && !vy) return;
+    const v = S.view, tx0 = v.tx, ty0 = v.ty; v.tx += vx; v.ty += vy; clampView();
+    const ax = v.tx - tx0, ay = v.ty - ty0, m = g.hit.m;
+    if (ax || ay) { if (g.hit.part === 'box') { m.bx -= ax / v.k; m.by -= ay / v.k; } else { m.x -= ax / v.k; m.y -= ay / v.k; } cancelDetail(); draw(); }
+    edgeRaf = requestAnimationFrame(step);
+  };
+  edgeRaf = requestAnimationFrame(step);
+}
 function endPtr(e) {
   if (!pts.has(e.pointerId)) return;
   const p = pts.get(e.pointerId); pts.delete(e.pointerId);
@@ -491,7 +528,12 @@ function endPtr(e) {
   const gg = g; g = null; pr = null;
   if (e.type === 'pointercancel') { draw(); queueDetail(); return; }
   if (!gg.moved) tap(p);
-  else if (gg.hit && !gg.pinch) persist();
+  else if (gg.hit && !gg.pinch) { // keep the whole label and the spot on the page, so nothing is cut off when saved
+    const m = gg.hit.m, L = layout(m);
+    m.bx = Math.max(0, Math.min(S.W - L.w, m.bx)); m.by = Math.max(0, Math.min(S.H - L.h, m.by));
+    m.x = Math.max(0, Math.min(S.W, m.x)); m.y = Math.max(0, Math.min(S.H, m.y));
+    persist();
+  }
   queueDetail(); draw();
 }
 cv.addEventListener('pointerup', endPtr); cv.addEventListener('pointercancel', endPtr);
@@ -518,7 +560,7 @@ function addMark(q) {
   if (!id) { toast('Type the damper ID first'); $('idIn').focus(); return; }
   pushUndo();
   const s = (Math.max(0.62, Math.min(1, cw / 560)) * S.sizeMul) / S.view.k;
-  const m = { id, note: '', color: S.color, x: q.x, y: q.y, bx: 0, by: 0, s };
+  const m = { id, note: '', color: S.color, style: S.style, x: q.x, y: q.y, bx: 0, by: 0, s };
   const L = layout(m), gap = 70 * s;
   // put the box above the spot if there is room on screen, otherwise below; keep it on the page
   const topVisible = toPage(0, 0).y, above = q.y - L.ry - gap - L.h;
@@ -527,7 +569,7 @@ function addMark(q) {
   m.bx = Math.max(2 * s, Math.min(S.W - L.w - 2 * s, m.bx)); m.by = Math.max(2 * s, Math.min(S.H - L.h - 2 * s, m.by));
   S.marks.push(m);
   S.nextId = bump(id); $('idIn').value = S.nextId;
-  hint(S.marks.length === 1 ? 'Drag the box or the circle to move it. Tap a box to change it.' : '');
+  hint(S.marks.length === 1 ? 'Drag the label out to the side. Hold it at the screen edge to keep going. Tap it to change it.' : '');
   persist(); draw();
 }
 function select(m) {
@@ -541,8 +583,18 @@ function syncPanel() {
   $('editRow').hidden = $('editRow2').hidden = $('doneBtn').hidden = !m;
   const cur = m ? m.color : S.color;
   [...$('chips').children].forEach((b) => b.classList.toggle('on', b.dataset.k === cur));
+  const st = m ? (m.style || 'circle') : S.style;
+  [...$('styles').children].forEach((b) => b.classList.toggle('on', b.dataset.k === st));
   $('undoBtn').disabled = !S.undo.length;
 }
+[...$('styles').children].forEach((b) => { b.onclick = () => {
+  const k = b.dataset.k;
+  if (S.sel && (S.sel.style || 'circle') !== k) { // keep the label centered where it was
+    pushUndo(); const m = S.sel, L0 = layout(m), cx = m.bx + L0.w / 2, cy = m.by + L0.h / 2;
+    m.style = k; const L1 = layout(m); m.bx = cx - L1.w / 2; m.by = cy - L1.h / 2;
+  }
+  S.style = k; syncPanel(); persist(); draw();
+}; });
 COLORS.forEach((c) => {
   const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.dataset.k = c.key; b.textContent = c.name; b.style.background = c.fill;
   b.onclick = () => { if (S.sel) { pushUndo(); S.sel.color = c.key; } S.color = c.key; syncPanel(); persist(); draw(); };
