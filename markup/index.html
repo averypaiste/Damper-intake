@@ -39,6 +39,13 @@
   .sb.tidy { flex: none; background: #fff7e0; border-color: #f0c64a; }
   .chip.ink { background: #fff; border-width: 1px; border-color: var(--line); display: flex; align-items: center; gap: 6px; }
   .chip.ink i { display: inline-block; width: 22px; height: 4px; border-radius: 2px; }
+  .sb.keep { flex: none; font-weight: 700; color: #fff; background: #1f7a3a; border-color: #1f7a3a; }
+  .sb.keep.ok { background: #e7f6ea; color: #1f7a3a; border-color: #9fd5ab; }
+  .alldoc { flex: none; width: 100%; max-width: 760px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; position: sticky; top: 0; z-index: 2; box-shadow: 0 4px 14px rgba(15,20,30,.18); }
+  .alldoc .big { padding: 12px 18px; font-size: 16px; }
+  .alldoc b { font-size: 15px; }
+  .alldoc span { color: var(--muted); font-size: 13px; }
+  .pg .cap span.ok { color: #1f7a3a; font-weight: 700; }
   .sb.done { background: var(--accent); color: #fff; border-color: var(--accent); margin-left: auto; }
   /* start screen */
   .start { position: absolute; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; overflow: auto; }
@@ -85,7 +92,7 @@
   <h1 id="title">Damper Markup</h1>
   <button class="tb" id="pagesBtn" type="button" hidden>☰ Pages</button>
   <button class="tb" id="undoBtn" type="button" disabled>↶ Undo</button>
-  <button class="tb go" id="saveBtn" type="button" disabled>Save</button>
+  <button class="tb go" id="saveBtn" type="button" disabled>📄 Export</button>
 </div>
 
 <div class="stage" id="stage">
@@ -112,6 +119,7 @@
     <div class="lbl" id="modeLbl">Next ID</div>
     <input type="text" id="idIn" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="FSD-1-12" enterkeyhint="done">
     <button class="sb done" id="doneBtn" type="button" hidden>Done</button>
+    <button class="sb keep" id="keepBtn" type="button">💾 Save page</button>
   </div>
   <div class="row">
     <div class="lbl">Style</div>
@@ -140,7 +148,7 @@
 
 <div class="sheet" id="sheet" hidden>
   <div class="box">
-    <h3>Save</h3>
+    <h3>Export</h3>
     <div class="seg"><button type="button" id="segView" class="on">What's on screen</button><button type="button" id="segPage">Whole page</button></div>
     <div class="seg" id="pdfSeg"><button type="button" id="segMarked">PDF of marked pages</button><button type="button" id="segFull">Full PDF with marks</button></div>
     <img id="outImg" alt="Marked-up plan">
@@ -157,7 +165,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = '2026-11-17-b';
+const APP_VERSION = '2026-11-17-c';
 const $ = (id) => document.getElementById(id);
 $('ver').textContent = 'Version ' + APP_VERSION + ' · works offline once opened · nothing is uploaded';
 
@@ -209,7 +217,25 @@ function persist() {
   if (S.marks.length) S.store.pages[S.pageNo] = S.marks; else delete S.store.pages[S.pageNo];
   S.store.nextId = S.nextId; S.store.color = S.color; S.store.sizeMul = S.sizeMul; S.store.style = S.style; S.store.ink = S.ink; S.store.page = S.pageNo;
   lsSet('markup:' + S.doc.key, S.store);
+  syncKeep();
 }
+/* "Save page": everything is already kept on this device as you go, this confirms it and shows it in the page list */
+const pageSig = () => JSON.stringify(S.marks);
+function isKept(n) { const k = (S.store.kept || {})[n]; return !!k && k === JSON.stringify((S.store.pages || {})[n] || []); }
+function syncKeep() {
+  const b = $('keepBtn'); if (!b || !S.page) return;
+  const ok = isKept(S.pageNo) && (S.store.kept || {})[S.pageNo] === pageSig();
+  b.textContent = ok ? '✓ Saved' : '💾 Save page'; b.classList.toggle('ok', ok);
+}
+$('keepBtn').onclick = () => {
+  if (!S.doc || !S.page) return;
+  if (!S.marks.length) { toast('Nothing to save on this page yet. Add a label first.'); return; }
+  S.sel = null; syncPanel(); draw();
+  S.store.kept = S.store.kept || {}; S.store.kept[S.pageNo] = pageSig(); persist();
+  const nums = markedPages(), saved = nums.filter(isKept);
+  if (S.doc.kind !== 'pdf' || S.doc.n < 2) toast('Saved on this device. Tap 📄 Export to share it.');
+  else toast('Page ' + S.pageNo + ' saved. ' + saved.length + ' of ' + nums.length + ' marked page' + (nums.length > 1 ? 's' : '') + ' saved. When you are done, tap ☰ Pages, then "All markups in one PDF".');
+};
 function idb() {
   return new Promise((res, rej) => {
     const r = indexedDB.open('damper-markup', 1);
@@ -304,10 +330,20 @@ function showPages() {
   $('saveBtn').disabled = !markedPages().length; $('undoBtn').disabled = true; hint('');
   if (pagesObs) pagesObs.disconnect();
   pagesObs = new IntersectionObserver((ents) => ents.forEach((en) => { if (en.isIntersecting) { pagesObs.unobserve(en.target); drawThumb(en.target); } }), { root: box, rootMargin: '400px' });
+  const nums = markedPages();
+  if (nums.length) {
+    const tot = nums.reduce((a, n) => a + S.store.pages[n].length, 0);
+    const hd = document.createElement('div'); hd.className = 'alldoc';
+    hd.innerHTML = '<b></b><span></span><button type="button" class="big">📄 All markups in one PDF</button>';
+    hd.querySelector('b').textContent = tot + ' label' + (tot > 1 ? 's' : '') + ' on ' + nums.length + ' page' + (nums.length > 1 ? 's' : '') + ' (' + nums.join(', ') + ')';
+    hd.querySelector('span').textContent = 'Makes one PDF with just the marked pages. You can also pick "Full PDF with marks" to keep every page.';
+    hd.querySelector('button').onclick = () => $('saveBtn').onclick();
+    box.appendChild(hd);
+  }
   for (let i = 1; i <= S.doc.n; i++) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'pg'; b.dataset.n = i;
     const cnt = ((S.store.pages || {})[i] || []).length;
-    b.innerHTML = '<div class="ph" style="aspect-ratio:1.4"></div><div class="cap">Page ' + i + '<span>' + (cnt ? cnt + ' mark' + (cnt > 1 ? 's' : '') : 'Tap to mark up') + '</span></div>';
+    b.innerHTML = '<div class="ph" style="aspect-ratio:1.4"></div><div class="cap">Page ' + i + '<span' + (cnt && isKept(i) ? ' class="ok">✓ Saved · ' : '>') + (cnt ? cnt + ' mark' + (cnt > 1 ? 's' : '') : 'Tap to mark up') + '</span></div>';
     b.onclick = () => { box.hidden = true; openPage(i); };
     box.appendChild(b); pagesObs.observe(b);
   }
@@ -606,7 +642,7 @@ function syncPanel() {
   $('modeLbl').textContent = m ? 'Editing' : 'Next ID';
   $('idIn').value = m ? m.id : S.nextId;
   $('noteIn').value = m ? (m.note || '') : '';
-  $('editRow').hidden = $('editRow2').hidden = $('doneBtn').hidden = !m;
+  $('editRow').hidden = $('editRow2').hidden = $('doneBtn').hidden = !m; $('keepBtn').hidden = !!m; syncKeep();
   const cur = m ? m.color : S.color;
   [...$('chips').children].forEach((b) => b.classList.toggle('on', b.dataset.k === cur));
   const ik = m ? (m.ink || 'black') : S.ink;
