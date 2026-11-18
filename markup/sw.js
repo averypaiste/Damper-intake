@@ -1,26 +1,10 @@
-// Keeps the markup tool available offline. Online: always fetch the newest files. Offline: use the saved copy.
-const CACHE = 'markup-v12';
-const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'pdf-lib.min.js', '../beta/pdfjs/pdf.min.js', '../beta/pdfjs/pdf.worker.min.js'];
-
-self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
-});
-
+// Markup moved into the app at ../beta/markup/ (2026-11-18). This replaces the old offline helper:
+// it clears the old saved copy, removes itself, and lets every request go to the site as normal.
+self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => /^markup-v\d+$/.test(k) && k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
-});
-
-self.addEventListener('fetch', (e) => {
-  const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
-  e.respondWith(
-    fetch(req.url, { cache: 'no-cache' }).then((res) => {
-      if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
-      return res;
-    }).catch(() => caches.match(req).then((hit) => hit || caches.match('index.html')))
-  );
+  e.waitUntil((async () => {
+    for (const k of await caches.keys()) if (/^markup-v\d+$/.test(k)) await caches.delete(k);
+    await self.registration.unregister();
+    for (const c of await self.clients.matchAll({ type: 'window' })) { try { c.navigate(c.url); } catch (err) {} }
+  })());
 });
