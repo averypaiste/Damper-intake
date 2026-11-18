@@ -51,6 +51,9 @@
   .start { position: absolute; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; overflow: auto; }
   .start h2 { margin: 0; font-size: 22px; }
   .start p { margin: 0; color: var(--muted); max-width: 34ch; }
+  .cont { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 16px; max-width: 440px; width: 100%; overflow-wrap: anywhere; }
+  .cont b { display: block; }
+  .cont span { display: block; font-size: 13px; color: var(--muted); }
   .tb { text-decoration: none; }
   .jobmaps { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 440px; }
   .jobmaps b { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
@@ -111,14 +114,15 @@
   <div class="verfoot" id="verFoot"></div>
   <div class="start" id="start">
     <h2>Damper Markup</h2>
-    <p>Put damper labels on a floor plan: a red circle on the spot, an arrow, and a colored box with the ID.</p>
+    <p>Put damper labels on a floor plan: a label with the ID, a line, and a small square on the spot.</p>
     <div class="jobmaps" id="jobMaps" hidden></div>
     <button class="big" id="bigOpen" type="button">Open a PDF or picture</button>
+    <button class="cont" id="contBtn" type="button" hidden></button>
     <button class="sb" id="cancelStart" type="button" hidden>Cancel</button>
     <ol class="steps">
       <li>Open the floor plan PDF (or a screenshot).</li>
       <li>Zoom in, type the damper ID, and tap its spot.</li>
-      <li>Drag the box where you want it, pick the color, then Save.</li>
+      <li>Drag the label where you want it, pick the color, then Export.</li>
     </ol>
     <div class="ver" id="ver"></div>
   </div>
@@ -175,7 +179,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = '2026-11-18-b';
+const APP_VERSION = '2026-11-18-c';
 const $ = (id) => document.getElementById(id);
 $('verFoot').textContent = 'Markup v' + APP_VERSION;
 $('ver').textContent = 'Version ' + APP_VERSION + ' · works offline once opened · nothing is uploaded';
@@ -962,7 +966,16 @@ $('backBtn').hidden = false;
 showStart();
 const fromApp = location.hash === '#job' && jobMaps().length;
 if (fromApp && jobMaps().length === 1) openJobMap(jobMaps()[0]);
-if (!fromApp) idbGet('last').then((v) => { if (v && v.blob && !S.doc) { const f = v.blob instanceof File ? v.blob : new File([v.blob], v.name || 'plan', { type: v.type || '' }); openFile(f, false); } });
+if (!fromApp) idbGet('last').then((v) => { // the last map is not opened by itself any more: offer it on the Open screen instead
+  if (!v || !v.blob || S.doc) return;
+  const f = v.blob instanceof File ? v.blob : new File([v.blob], v.name || 'plan', { type: v.type || '' });
+  const st = lsGet('markup:' + f.name + ':' + f.size) || {}, P = st.pages || {};
+  const n = Object.keys(P).reduce((a, k) => a + ((P[k] || []).length), 0);
+  const b = $('contBtn'); b.textContent = '';
+  const t = document.createElement('b'); t.textContent = 'Continue: ' + f.name;
+  const sp = document.createElement('span'); sp.textContent = n ? n + ' label' + (n > 1 ? 's' : '') + ' so far' : 'No labels yet';
+  b.append(t, sp); b.hidden = false; b.onclick = () => openFile(f, false);
+});
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('../sw.js', { scope: '../' }).catch(() => {}); // the app's own offline copy covers Markup too
 </script>
 </body>

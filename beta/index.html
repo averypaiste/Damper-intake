@@ -990,7 +990,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-18-b (test copy)';
+const APP_VERSION = '2026-11-18-c (test copy)';
 try { document.getElementById('verFoot').textContent = 'Damper Inspection · version ' + APP_VERSION; } catch {}
 let quietRetry = false;
 function report(msg, manual) {
