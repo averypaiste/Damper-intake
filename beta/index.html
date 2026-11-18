@@ -990,7 +990,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-17-e (test copy)';
+const APP_VERSION = '2026-11-18-a (test copy)';
 try { document.getElementById('verFoot').textContent = 'Damper Inspection · version ' + APP_VERSION; } catch {}
 let quietRetry = false;
 function report(msg, manual) {
@@ -2317,7 +2317,7 @@ async function renderHome() {
   $('hCount').textContent = countText(hits.length, all.length);
 }
 $('hMiss').onclick = () => { onlyMiss = !onlyMiss; renderHome(); };
-const setFmode = () => { $('fmode').textContent = floorMode ? '▦ Table' : '☰ Checklist'; $('btnMM').hidden = $('btnMU').hidden = floorMode; }; // Map maker and Markup are for Manager view only
+const setFmode = () => { $('fmode').textContent = floorMode ? '▦ Table' : '☰ Checklist'; $('btnMM').hidden = true; $('btnMU').hidden = floorMode; }; // Markup is for Manager view only. Map maker is off the screen (Avery 2026-11-18); its saved maps still show in 🗺 Map and Markup
 $('btnMM').onclick = () => mmStart();
 // Markup: opens the markup tool (../markup/) on the job's map that is already saved on this device
 $('btnMU').onclick = async () => {
