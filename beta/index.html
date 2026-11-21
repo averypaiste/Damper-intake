@@ -754,13 +754,7 @@ function openPicker(f, target) {
   $('pkClose').className = multi ? '' : 'secondary';
   const dlg = $('picker'), search = $('pkSearch'), list = $('pkList');
   $('pkTitle').textContent = f.label || f.key;
-  // Building comes from the label ("Building A · FD-1-011"); floor is the 2nd number in the ID (FD-2-009 = floor 2)
-  const parts = (n) => {
-    const i = n.indexOf(' · '), id = i < 0 ? n : n.slice(i + 3);
-    const m = id.match(/^[^\d]*?\d*[-\s_.]+(\d+)[-\s_.]/);
-    return { b: i < 0 ? '' : n.slice(0, i), fl: m ? String(parseInt(m[1], 10)) : '' };
-  };
-  const info = all.map(parts);
+  const info = all.map(job.place);
   const bl = [...new Set(info.map((x) => x.b).filter(Boolean))];
   const fl = [...new Set(info.map((x) => x.fl).filter(Boolean))].sort((a, b) => a - b);
   const bSel = $('pkBld'), fSel = $('pkFlr'), box = $('pkFilters');
@@ -829,7 +823,7 @@ const sameVal = (a, b) => (Array.isArray(a) || Array.isArray(b))
   ? JSON.stringify([].concat(a || []).map(String).sort()) === JSON.stringify([].concat(b || []).map(String).sort())
   : String(a == null ? '' : a).trim() === String(b == null ? '' : b).trim();
 async function applyFill(label) {
-  const ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key], recId = o && o.recs && o.recs[label];
+  const recId = job.recId(label);
   const d = await loadDetail();
   const mine = (d && d.fill && recId && d.fill[recId]) || {};
   airVals = null;
@@ -841,7 +835,7 @@ async function applyFill(label) {
       if (f.multi) {
         v = v == null ? [] : Array.isArray(v) ? v : [v];
         const po = getOpts()[f.key] || {};
-        if (po.type === 'multipleRecordLinks') { const inv = {}; for (const [lb, id] of Object.entries(po.recs || {})) inv[id] = lb; v = v.map((id) => inv[id]).filter(Boolean); } // the same ones the form can show
+        if (po.type === 'multipleRecordLinks') { const inv = job.linkNames(f.key); v = v.map((id) => inv[id]).filter(Boolean); } // the same ones the form can show
       }
       airVals[f.key] = v == null ? '' : v;
     }
@@ -855,7 +849,7 @@ async function applyFill(label) {
     const el = $(fid(f.key)), po = getOpts()[f.key] || {};
     if (f.multi) {
       let names = val;
-      if (po.type === 'multipleRecordLinks') { const inv = {}; for (const [lb, id] of Object.entries(po.recs || {})) inv[id] = lb; names = val.map((id) => inv[id]).filter(Boolean); }
+      if (po.type === 'multipleRecordLinks') { const inv = job.linkNames(f.key); names = val.map((id) => inv[id]).filter(Boolean); }
       if (!names.length) continue;
       el.dataset.sel = JSON.stringify(names); el.value = names.join(', ');
     } else {
@@ -870,7 +864,7 @@ function hideInfo() { clearEx(); const i = $('info'); if (i) { i.hidden = true; 
 let infoSeq = 0;
 async function showInfo(label) {
   const inf = $('info'); if (!inf) return;
-  const ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key], recId = o && o.recs && o.recs[label];
+  const recId = job.recId(label);
   const seq = ++infoSeq;
   if (!recId) { hideInfo(); return; }
   const d = await loadDetail();
@@ -1005,6 +999,25 @@ async function savePhotos(c, t, vid, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
+/* ---------- The job on this phone: the dampers loaded from Airtable for the open job ----------
+   Screens ask these questions instead of digging through the saved lists themselves. */
+const job = {
+  idField: () => FIELDS.find((f) => f.existing), // the form's "Damper IDs" field (read only, never written)
+  recs: () => (getOpts()[job.idField().key] || {}).recs || {}, // label -> Airtable row
+  dampers: () => (getOpts()[job.idField().key] || {}).choices || [], // labels as the list shows them: "Bldg A · FD-1-011"
+  loaded: () => Object.keys(job.recs()).length > 0,
+  recId: (label) => (label && job.recs()[label]) || '',
+  place(label) { // building from the label; floor is the 2nd number in the ID (FD-2-009 = floor 2)
+    const i = label.indexOf(' · '), id = i < 0 ? label : label.slice(i + 3);
+    const m = id.match(/^[^\d]*?\d*[-\s_.]+(\d+)[-\s_.]/);
+    return { b: i < 0 ? '' : label.slice(0, i), fl: m ? String(parseInt(m[1], 10)) : '' };
+  },
+  linkNames(key) { // linked-record IDs -> the names people see (Inspection Note - Select…); one field, or all of them
+    const rev = {};
+    for (const [k, o] of Object.entries(getOpts() || {})) if ((!key || k === key) && o && o.type === 'multipleRecordLinks' && o.recs) for (const [nm, id] of Object.entries(o.recs)) rev[id] = nm;
+    return rev;
+  },
+};
 const APP_VERSION = '2026-11-21-a (test copy)';
 try { document.getElementById('verFoot').textContent = 'Damper Inspection · version ' + APP_VERSION; } catch {}
 let quietRetry = false;
@@ -1256,7 +1269,7 @@ async function refreshOptionsInner(manual) {
     for (const f of FIELDS) snap[f.key] = { v: $(fid(f.key)).value, sel: $(fid(f.key)).dataset.sel || '' };
     buildFields();
     for (const f of FIELDS) { const e = $(fid(f.key)); if (snap[f.key].v !== '') e.value = snap[f.key].v; if (snap[f.key].sel) e.dataset.sel = snap[f.key].sel; }
-    const ef = FIELDS.find((f) => f.existing), eo = out[ef.key];
+    const ef = job.idField(), eo = out[ef.key];
     if ($(fid(ef.key)).value) showInfo($(fid(ef.key)).value);
     const summary = FIELDS.filter((f) => f.type === 'select').map((f) => {
       const o = out[f.key]; if (!o) return f.key + ': not found';
@@ -1489,7 +1502,7 @@ function buildFields() {
 let newMode = false;
 function applyMode() {
   $('newBox').hidden = !newMode;
-  const ef = FIELDS.find((f) => f.existing), pk = $(fid(ef.key));
+  const pk = $(fid(job.idField().key));
   pk.disabled = newMode; pk.required = !newMode;
   pk.parentElement.hidden = true; // the damper's name is already in the title bar
   if (newMode) hideInfo(); else if (pk.value) showInfo(pk.value);
@@ -1506,8 +1519,7 @@ function resetForm() {
 function showScreen(detail) { const d = $('detail'); if (detail) { if (!d.open) d.showModal(); } else if (d.open) d.close(); }
 let curLabel = '';
 async function showMissing(label) {
-  const box = $('missBox'), ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key] || {};
-  const id = label && o.recs && o.recs[label];
+  const box = $('missBox'), id = job.recId(label);
   if (!id) { box.hidden = true; return; }
   const d = await loadDetail();
   const txt = (d && d.flags && d.flags[id]) || '';
@@ -1527,7 +1539,7 @@ function focusField(name) {
   }, 120);
 }
 async function openDamper(label, force, focusName) {
-  const ef = FIELDS.find((f) => f.existing), el = $(fid(ef.key)), o = getOpts()[ef.key] || {};
+  const el = $(fid(job.idField().key));
   homeScroll = window.scrollY;
   const same = !force && !newMode && el.value === label;
   newMode = false; curLabel = label;
@@ -1543,7 +1555,7 @@ async function openDamper(label, force, focusName) {
   restoring = true;
   await applyFill(label);
   baseline = formState(); refreshChips();
-  const key = (o.recs && o.recs[label]) || '';
+  const key = job.recId(label);
   const had = key && await restoreDraft(key);
   refreshChips();
   restoring = false;
@@ -1642,8 +1654,7 @@ function openQuick(n, name, dd, recs) {
   $('qTitle').textContent = n.replace(/^.*· /, '') + ' · ' + (pf || f.label || f.key);
   const o = f ? (getOpts()[f.key] || {}) : {};
   const cur = ((dd && dd.fill) || {})[rid] || {};
-  const rev = {};
-  for (const oo of Object.values(getOpts() || {})) if (oo && oo.type === 'multipleRecordLinks' && oo.recs) for (const [nm, id] of Object.entries(oo.recs)) rev[id] = nm;
+  const rev = job.linkNames();
   let el, qPhotos = [];
   const pickOnly = f && f.type === 'select' && (o.choices || []).length > 0;
   let startVal = '';
@@ -1769,8 +1780,7 @@ function holdToCopy(el, fn) {
 function copyCell(n, rid, name, dd) {
   const f = FIELDS.find((x) => norm(x.key) === norm(name) && !x.newOnly && !x.existing);
   if (!f) { toast('This column can\'t be copied'); return; }
-  const o = getOpts()[f.key] || {}, rev = {};
-  if (o.type === 'multipleRecordLinks' && o.recs) for (const [nm, id] of Object.entries(o.recs)) rev[id] = nm;
+  const rev = job.linkNames(f.key);
   let v = (((dd && dd.fill) || {})[rid] || {})[f.key];
   if (v == null || v === '' || (Array.isArray(v) && !v.length)) { toast('Nothing to copy in this cell'); return; }
   if (f.multi) v = (Array.isArray(v) ? v : [v]).map((x) => rev[x] || x);
@@ -1897,8 +1907,7 @@ function renderGrid(list, groups, ctx) {
   const colIx = {}; for (const k of (dd && dd.order) || []) colIx[norm(k)] = k;
   const picKey = {}; // photo column -> real column name
   for (const p of PHOTOS) picKey[p] = norm(getNames()[p] || p);
-  const rev = {}; // linked-record ids -> the names people see (Inspection Note - Select, Suggested Follow-up…)
-  for (const o of Object.values(getOpts() || {})) if (o && o.type === 'multipleRecordLinks' && o.recs) for (const [nm, id] of Object.entries(o.recs)) rev[id] = nm;
+  const rev = job.linkNames();
   const names2 = (v) => String(v).split(/,\s*/).map((t) => rev[t.trim()] || t).join(', ');
   const val = (rid, name) => {
     const rec = ((dd && dd.recs) || {})[rid] || {}, k = colIx[norm(name)];
@@ -2139,7 +2148,7 @@ $('hSort').onchange = () => {
 const countText = (n, all) => !all ? 'tap ↻ to load' : n === all ? all + ' dampers' : n + ' of ' + all;
 async function renderHome() {
   const seq = ++homeSeq;
-  const ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key] || {}, all = [...(o.choices || [])].sort(cmpDamper), recs = o.recs || {};
+  const all = [...job.dampers()].sort(cmpDamper), recs = job.recs();
   const items = await allItems();
   if (seq !== homeSeq) return;
   const waiting = new Set(items.filter((i) => i.status !== 'synced' && i.recordId).map((i) => i.recordId));
@@ -2147,12 +2156,7 @@ async function renderHome() {
   const dd = await loadDetail(), fl8 = (dd && dd.flags) || {};
   if (seq !== homeSeq) return;
   $('btnNew').textContent = drafts.NEW ? '+ New damper (draft)' : '+ New damper';
-  const parts = (n) => {
-    const i = n.indexOf(' · '), id = i < 0 ? n : n.slice(i + 3);
-    const m = id.match(/^[^\d]*?\d*[-\s_.]+(\d+)[-\s_.]/);
-    return { b: i < 0 ? '' : n.slice(0, i), fl: m ? String(parseInt(m[1], 10)) : '' };
-  };
-  const info = all.map(parts);
+  const info = all.map(job.place);
   const bSel = $('hBld'), fSel = $('hFlr');
   const mem = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
   const fill = (el, first, vals, fmt, key) => { const cur = el.value || mem(key); el.textContent = ''; [['', first], ...vals.map((v) => [v, fmt ? fmt(v) : v])].forEach(([v, t]) => el.append(new Option(t, v))); el.value = vals.includes(cur) ? cur : ''; };
@@ -3060,16 +3064,14 @@ async function commitForm(quiet) {
     else if (!empty) changes[f.key] = v;
   }
   let presetId = null, label = '';
-  const ef = FIELDS.find((f) => f.existing);
   if (newMode) {
     const num = vals['Damper ID #'] || '';
     if (!num) { toast(quiet ? 'New damper kept as a draft. Enter the damper number to send it.' : 'Enter the damper number'); return false; }
     if (/[-\s]/.test(num)) { toast((quiet ? 'New damper kept as a draft. ' : '') + 'Enter just the number (for example 011), not the whole ID. Pick the type and floor above.'); return false; }
     label = [vals['Damper type'], vals['Floor'], num].filter(Boolean).join('-');
   } else {
-    const o = getOpts()[ef.key];
-    if (!o || !o.recs || !Object.keys(o.recs).length) { toast('Damper list not loaded yet, so this was kept as a draft. Tap Refresh lists at the top.'); return false; }
-    presetId = o.recs[pickedId];
+    if (!job.loaded()) { toast('Damper list not loaded yet, so this was kept as a draft. Tap Refresh lists at the top.'); return false; }
+    presetId = job.recId(pickedId);
     if (!presetId) { toast('Pick a Damper ID from the list'); return false; }
     label = pickedId;
   }
@@ -3143,11 +3145,11 @@ async function sync(manual) {
         // 1) create the record once; remember its id so a retry never duplicates it
         if (!it.recordId) {
           const res = await api(`https://api.airtable.com/v0/${it.base || c.base}/${encodeURIComponent(it.tbl || tableRef(c))}`,
-            { fields: (({ [FIELDS.find((f) => f.existing).key]: _, ...rest }) => rest)(it.fields), typecast: true });
+            { fields: (({ [job.idField().key]: _, ...rest }) => rest)(it.fields), typecast: true });
           it.recordId = res.id; createdAny = true; it.dropped = dropped(it.fields, res); await putItem(it);
         } else if (it.preset && !it.patched) {
           // existing damper: fill in its row instead of creating a new one
-          const body = { ...it.fields }; delete body[FIELDS.find((f) => f.existing).key];
+          const body = { ...it.fields }; delete body[job.idField().key];
           if (Object.keys(body).length) {
             const res = await api(`https://api.airtable.com/v0/${it.base || c.base}/${encodeURIComponent(it.tbl || tableRef(c))}/${it.recordId}`,
               { fields: body, typecast: true }, 'PATCH');
@@ -3461,7 +3463,7 @@ document.addEventListener('close', () => setTimeout(() => autoRefresh(AUTO_REFRE
 /* ---------- Jobs: every damper base the token can open, and which ones are kept on this phone ---------- */
 async function setOpPill(label) {
   const el = $('dOp'); el.textContent = '';
-  const ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key] || {}, rid = (o.recs || {})[label], d = await loadDetail();
+  const rid = job.recId(label), d = await loadDetail();
   const v = ((d && d.fill && d.fill[rid]) || {})['Operational Test'];
   if (v && curLabel === label) el.append(chipEl(v));
 }
