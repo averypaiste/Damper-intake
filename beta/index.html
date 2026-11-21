@@ -950,7 +950,7 @@ $('viewer').addEventListener('close', () => { $('viewerImg').removeAttribute('sr
 const PKEY = 'https://local.invalid/photo/';
 let photoJob = false;
 function setDl(msg) { const e = $('dl'); if (!e) return; e.hidden = !msg; e.textContent = msg || ''; }
-async function savePhotos(c, t, viewQ, photoNames) {
+async function savePhotos(c, t, vid, photoNames) {
   if (photoJob || !navigator.onLine || !photoNames.length) return;
   photoJob = true;
   let done = 0, failed = 0, total = 0, lastWhy = '', lastWhyText = '';
@@ -958,23 +958,16 @@ async function savePhotos(c, t, viewQ, photoNames) {
     const cache = await caches.open('beta-photos');
     const have = new Set((await cache.keys()).map((r) => r.url.slice(PKEY.length)));
     const pics = {}, todo = [], seen = new Set(), off = isOffline(c.base), base = c.base;
-    let offset = '';
-    for (let pg = 0; pg < 100; pg++) {
-      const r = await airtableGet(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}?pageSize=100${photoNames.map((n) => '&fields%5B%5D=' + encodeURIComponent(n)).join('')}${viewQ}${offset ? '&offset=' + encodeURIComponent(offset) : ''}`, { headers: { Authorization: 'Bearer ' + c.token } });
-      if (!r.ok) break;
-      const j = await r.json();
-      for (const rec of j.records) for (const n of photoNames) {
-        const at = rec.fields[n]; if (!Array.isArray(at)) continue;
-        for (const a of at) {
-          (pics[rec.id] ||= {})[n] ||= [];
-          const u = a.thumbnails && (a.thumbnails.large || a.thumbnails.small || {}).url;
-          pics[rec.id][n].push({ id: a.id, fn: a.filename || '', u: u || '' });
-          seen.add(a.id);
-          if (off && u && !have.has(a.id)) todo.push({ id: a.id, u });
-        }
+    const { records } = await readAll(tableRef(c), { fields: photoNames, view: vid, base: c.base, token: c.token }); // a failed page keeps what came before it
+    for (const rec of records) for (const n of photoNames) {
+      const at = rec.fields[n]; if (!Array.isArray(at)) continue;
+      for (const a of at) {
+        (pics[rec.id] ||= {})[n] ||= [];
+        const u = a.thumbnails && (a.thumbnails.large || a.thumbnails.small || {}).url;
+        pics[rec.id][n].push({ id: a.id, fn: a.filename || '', u: u || '' });
+        seen.add(a.id);
+        if (off && u && !have.has(a.id)) todo.push({ id: a.id, u });
       }
-      if (!j.offset) break;
-      offset = j.offset;
     }
     if (cfg().base !== base) return; // switched to another job meanwhile
     const d = await loadDetail(), prev = [];
@@ -1033,15 +1026,13 @@ function report(msg, manual) {
   const r = $('sResult'); if (r) { r.textContent = msg; r.style.fontWeight = '600'; r.style.color = 'var(--ink)'; }
 }
 // With no column chosen in Settings, use "Damper ID" or "Damper IDs", whichever actually has the IDs in it
-async function pickIdColumn(t, c, viewQ) {
+async function pickIdColumn(t, c, vid) {
   const names = ['damper ids', 'damper id'];
   const cands = t.fields.filter((x) => names.includes(x.name.trim().toLowerCase()));
   if (!cands.length) return findField(t, 'Damper IDs');
   if (cands.length === 1) return cands[0];
-  const qs = cands.map((x) => 'fields%5B%5D=' + encodeURIComponent(x.name)).join('&');
-  const rr = await airtableGet(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}?pageSize=100&${qs}${viewQ}`, { headers: { Authorization: 'Bearer ' + c.token } });
-  if (!rr.ok) return cands[0];
-  const rows = (await rr.json()).records;
+  const { records: rows, status } = await readAll(tableRef(c), { fields: cands.map((x) => x.name), view: vid, maxPages: 1, base: c.base, token: c.token }); // the first 100 rows are enough to tell
+  if (status) return cands[0];
   const filled = (x) => rows.filter((r) => { const v = Array.isArray(r.fields[x.name]) ? r.fields[x.name][0] : r.fields[x.name]; return v != null && typeof v !== 'object' && String(v).trim() !== ''; }).length;
   return cands.map((x) => ({ x, n: filled(x) })).sort((a, b) => b.n - a.n)[0].x;
 }
@@ -1088,7 +1079,6 @@ async function refreshOptionsInner(manual) {
     const hiddenNames = [...new Set([...FIELDS.filter((f) => !f.existing && !f.newOnly).map((f) => f.key), ...PHOTOS, ...INFO_FIELDS, MISS_FIELD])]
       .filter((n) => { const fd = findField(t, n, vis); return fd && !vis(fd); });
     localStorage.setItem('hidden', JSON.stringify(hiddenNames));
-    const viewQ = vid ? '&view=' + encodeURIComponent(vid) : ''; // a picked view (e.g. one building's Tech View) shows only its rows
     const out = {}, missing = [], problems = [], names = {}, notes = [];
     let pendingDetail = null, pendingRaw = {};
     for (const f of FIELDS) {
@@ -1098,7 +1088,7 @@ async function refreshOptionsInner(manual) {
         continue;
       }
       const want = f.existing && c.idField ? c.idField : f.key;
-      const fld = f.existing && !c.idField ? await pickIdColumn(t, c, viewQ) : findField(t, want, vis);
+      const fld = f.existing && !c.idField ? await pickIdColumn(t, c, vid) : findField(t, want, vis);
       if (!fld) { missing.push(want); continue; }
       names[f.key] = fld.name;
       if (!f.existing && COMPUTED.test(fld.type)) problems.push('"' + fld.name + '" is a calculated column in Airtable (' + fld.type + '), so nothing can be saved to it. Is there another column with a similar name?');
@@ -1110,18 +1100,12 @@ async function refreshOptionsInner(manual) {
         const pf = lt && (lt.fields.find((x) => x.id === lt.primaryFieldId) || lt.fields[0]);
         const recs = {};
         if (pf) {
-          let lo = '';
-          for (let pg = 0; pg < 50; pg++) {
-            const lr = await airtableGet(`https://api.airtable.com/v0/${c.base}/${lt.id}?pageSize=100&fields%5B%5D=${encodeURIComponent(pf.name)}${lo ? '&offset=' + encodeURIComponent(lo) : ''}`, { headers: { Authorization: 'Bearer ' + c.token } });
-            if (!lr.ok) { problems.push('Could not read the choices for "' + fld.name + '" from the "' + lt.name + '" table (error ' + lr.status + ').'); break; }
-            const ld = await lr.json();
-            for (const x of ld.records) {
-              const base = plain(x.fields[pf.name]); if (!base) continue;
-              let k = base, n = 2; while (recs[k]) k = `${base} (${n++})`;
-              recs[k] = x.id;
-            }
-            if (!ld.offset) break;
-            lo = ld.offset;
+          const { records, status } = await readAll(lt.id, { fields: [pf.name], maxPages: 50, base: c.base, token: c.token });
+          if (status) problems.push('Could not read the choices for "' + fld.name + '" from the "' + lt.name + '" table (error ' + status + ').');
+          for (const x of records) {
+            const base = plain(x.fields[pf.name]); if (!base) continue;
+            let k = base, n = 2; while (recs[k]) k = `${base} (${n++})`;
+            recs[k] = x.id;
           }
         }
         out[f.key].recs = recs;
@@ -1141,15 +1125,9 @@ async function refreshOptionsInner(manual) {
           const lt = tables.find((x) => x.id === tid);
           const pf = lt && (lt.fields.find((x) => x.id === lt.primaryFieldId) || lt.fields[0]);
           if (!pf) return;
-          let lo = '';
-          for (let pg = 0; pg < 50; pg++) {
-            const lr = await airtableGet(`https://api.airtable.com/v0/${c.base}/${lt.id}?pageSize=100&fields%5B%5D=${encodeURIComponent(pf.name)}${lo ? '&offset=' + encodeURIComponent(lo) : ''}`, { headers: { Authorization: 'Bearer ' + c.token } });
-            if (!lr.ok) { problems.push('Could not read names from the "' + lt.name + '" table (error ' + lr.status + ').'); break; }
-            const ld = await lr.json();
-            for (const x of ld.records) linkNames[tid][x.id] = plain(x.fields[pf.name]);
-            if (!ld.offset) break;
-            lo = ld.offset;
-          }
+          const { records, status } = await readAll(lt.id, { fields: [pf.name], maxPages: 50, base: c.base, token: c.token });
+          if (status) problems.push('Could not read names from the "' + lt.name + '" table (error ' + status + ').');
+          for (const x of records) linkNames[tid][x.id] = plain(x.fields[pf.name]);
         };
         // every column except photos/buttons is saved so the whole record can be shown offline
         const infoFields = t.fields.filter((x) => vis(x) && (/Attachment/i.test(x.type) || INFO_FIELDS.some((n) => norm(n) === norm(x.name))));
@@ -1170,31 +1148,23 @@ async function refreshOptionsInner(manual) {
         // the form's own fields are fetched too, so they can be filled in from what Airtable already has
         const fillCols = FIELDS.filter((x) => !x.existing && !x.newOnly).map((x) => ({ key: x.key, fd: findField(t, x.key, vis) })).filter((x) => x.fd && vis(x.fd));
         const wantCols = [...new Set([fld.name, ...(bcol ? [bcol.name] : []), ...showCols.map((x) => x.name), ...fillCols.map((x) => x.fd.name), ...(missCol ? [missCol.name] : [])])];
-        const colsQ = wantCols.map((n) => '&fields%5B%5D=' + encodeURIComponent(n)).join('');
-        let offset = '', scanned = 0;
-        for (let page = 0; page < 50; page++) {
-          const rr = await airtableGet(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}?pageSize=100${colsQ}${viewQ}${offset ? '&offset=' + encodeURIComponent(offset) : ''}`,
-            { headers: { Authorization: 'Bearer ' + c.token } });
-          if (!rr.ok) { report('Could not finish loading the dampers (error ' + rr.status + '). Your last list was kept.', manual); return; }
-          const d = await rr.json();
-          scanned += d.records.length;
-          for (const rec of d.records) {
-            let v = rec.fields[fld.name];
-            if (Array.isArray(v)) v = v[0];
-            if (v == null || typeof v === 'object') continue;
-            const id = String(v).trim();
-            if (!id) continue;
-            rows.push({ id, b: bcol ? bval(rec.fields[bcol.name]) : '', rec: rec.id });
-            const o1 = {};
-            for (const x of showCols) { const dv = disp(rec.fields[x.name], x); if (dv !== '') o1[x.name] = dv; }
-            det[rec.id] = o1;
-            if (missCol) { const mv = disp(rec.fields[missCol.name], missCol).trim(); if (mv) flags[rec.id] = mv.slice(0, 1500); }
-            const rf = {};
-            for (const x of fillCols) if (rec.fields[x.fd.name] != null) rf[x.key] = rec.fields[x.fd.name];
-            rawFill[rec.id] = rf;
-          }
-          if (!d.offset) break;
-          offset = d.offset;
+        const { records: allRecs, status: rowsErr } = await readAll(tableRef(c), { fields: wantCols, view: vid, maxPages: 50, base: c.base, token: c.token });
+        if (rowsErr) { report('Could not finish loading the dampers (error ' + rowsErr + '). Your last list was kept.', manual); return; }
+        const scanned = allRecs.length;
+        for (const rec of allRecs) {
+          let v = rec.fields[fld.name];
+          if (Array.isArray(v)) v = v[0];
+          if (v == null || typeof v === 'object') continue;
+          const id = String(v).trim();
+          if (!id) continue;
+          rows.push({ id, b: bcol ? bval(rec.fields[bcol.name]) : '', rec: rec.id });
+          const o1 = {};
+          for (const x of showCols) { const dv = disp(rec.fields[x.name], x); if (dv !== '') o1[x.name] = dv; }
+          det[rec.id] = o1;
+          if (missCol) { const mv = disp(rec.fields[missCol.name], missCol).trim(); if (mv) flags[rec.id] = mv.slice(0, 1500); }
+          const rf = {};
+          for (const x of fillCols) if (rec.fields[x.fd.name] != null) rf[x.key] = rec.fields[x.fd.name];
+          rawFill[rec.id] = rf;
         }
         // Sort by building, then ID, and put the building in front so the same number in two buildings is easy to tell apart
         const cmp = (x, y) => x.localeCompare(y, undefined, { numeric: true });
@@ -1219,18 +1189,11 @@ async function refreshOptionsInner(manual) {
         // Airtable does not expose the collaborator list, so collect people already used in this column
         const people = {};
         for (const p of f.people || []) people[p.name] = { email: p.email };
-        let offset = '';
-        for (let page = 0; page < 10; page++) {
-          const rr = await airtableGet(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}?pageSize=100&fields%5B%5D=${encodeURIComponent(fld.name)}${offset ? '&offset=' + encodeURIComponent(offset) : ''}`,
-            { headers: { Authorization: 'Bearer ' + c.token } });
-          if (!rr.ok) { problems.push('Could not read the ' + fld.name + ' column (error ' + rr.status + '). The token needs data.records:read.'); break; }
-          const d = await rr.json();
-          for (const rec of d.records) {
-            const v = rec.fields[fld.name];
-            for (const u of Array.isArray(v) ? v : v ? [v] : []) if (u && (u.name || u.email)) people[u.name || u.email] = { id: u.id, email: u.email };
-          }
-          if (!d.offset) break;
-          offset = d.offset;
+        const { records: pRecs, status: pErr } = await readAll(tableRef(c), { fields: [fld.name], maxPages: 10, base: c.base, token: c.token });
+        if (pErr) problems.push('Could not read the ' + fld.name + ' column (error ' + pErr + '). The token needs data.records:read.');
+        for (const rec of pRecs) {
+          const v = rec.fields[fld.name];
+          for (const u of Array.isArray(v) ? v : v ? [v] : []) if (u && (u.name || u.email)) people[u.name || u.email] = { id: u.id, email: u.email };
         }
         // also list everyone who has access to the base (Airtable gives their emails, not names)
         try {
@@ -1281,7 +1244,7 @@ async function refreshOptionsInner(manual) {
       const keepPics = await loadDetail();
       pendingDetail.pics = (keepPics && keepPics.pics) || {};
       await saveDetail(pendingDetail);
-      savePhotos(c, t, viewQ, pendingDetail.photos); // runs in the background
+      savePhotos(c, t, vid, pendingDetail.photos); // runs in the background
     }
     const noPics = [];
     for (const name of PHOTOS) { const fl = findField(t, name, vis); if (fl) names[name] = fl.name; if (!fl || !vis(fl)) noPics.push(name); }
@@ -1347,6 +1310,23 @@ async function airtableGet(url, init) {
   }
   await pace();
   return fetch(url, init);
+}
+// Every row of a table (100 at a time, as Airtable hands them out), with only the columns asked for.
+// view: a view ID (only its rows, in its order). Gives { records, status }: status 0 = all rows came back,
+// otherwise the error code of the page that failed, and records holds the rows read before it.
+async function readAll(table, { fields = [], view = '', maxPages = 100, base = cfg().base, token = cfg().token } = {}) {
+  const records = [];
+  let offset = '';
+  for (let pg = 0; pg < maxPages; pg++) {
+    const q = ['pageSize=100', ...fields.map((n) => 'fields%5B%5D=' + encodeURIComponent(n)), ...(view ? ['view=' + encodeURIComponent(view)] : []), ...(offset ? ['offset=' + encodeURIComponent(offset)] : [])].join('&');
+    const r = await airtableGet(`https://api.airtable.com/v0/${base}/${encodeURIComponent(table)}?${q}`, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return { records, status: r.status };
+    const j = await r.json();
+    records.push(...(j.records || []));
+    if (!j.offset) break;
+    offset = j.offset;
+  }
+  return { records, status: 0 };
 }
 // Only one refresh at a time (saving settings, syncing and opening the app can all ask for one)
 let refreshing = false;
@@ -3516,19 +3496,13 @@ async function refreshMaps(tables, manual) {
     const pf = t.fields.find((f) => f.id === t.primaryFieldId) || t.fields[0];
     if (!atts.length) { delete idx[c.base]; setMapIdx(idx); setJobBar(); return; }
     const v = (t.views || []).find((x) => norm(x.name) === 'gridview');
-    const q = [pf, ...atts].map((f) => 'fields%5B%5D=' + encodeURIComponent(f.name)).join('&');
     const items = [];
-    let off = '';
-    for (let pg = 0; pg < 5; pg++) {
-      const r = await airtableGet(`https://api.airtable.com/v0/${c.base}/${t.id}?pageSize=100&${q}${v ? '&view=' + v.id : ''}${off ? '&offset=' + encodeURIComponent(off) : ''}`, { headers: { Authorization: 'Bearer ' + c.token } });
-      if (!r.ok) return;
-      const d = await r.json();
-      for (const rec of d.records) for (const f of atts) for (const a of rec.fields[f.name] || []) {
-        if (!/pdf|image/i.test(a.type || '') && !/\.pdf$/i.test(a.filename || '')) continue;
-        mapUrls[a.id] = a.url;
-        items.push({ id: a.id, fn: a.filename || 'map.pdf', size: a.size || 0, type: a.type || 'application/pdf', col: f.name, rec: String(rec.fields[pf.name] || '').trim() });
-      }
-      if (!d.offset) break; off = d.offset;
+    const { records: mRecs, status: mErr } = await readAll(t.id, { fields: [pf, ...atts].map((f) => f.name), view: v ? v.id : '', maxPages: 5, base: c.base, token: c.token });
+    if (mErr) return;
+    for (const rec of mRecs) for (const f of atts) for (const a of rec.fields[f.name] || []) {
+      if (!/pdf|image/i.test(a.type || '') && !/\.pdf$/i.test(a.filename || '')) continue;
+      mapUrls[a.id] = a.url;
+      items.push({ id: a.id, fn: a.filename || 'map.pdf', size: a.size || 0, type: a.type || 'application/pdf', col: f.name, rec: String(rec.fields[pf.name] || '').trim() });
     }
     // PDFs are the maps; pictures only count when there is no PDF
     const pdfs = items.filter((m) => /pdf/i.test(m.type) || /\.pdf$/i.test(m.fn));

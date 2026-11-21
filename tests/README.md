@@ -11,4 +11,5 @@ Small browser checks (Playwright). Each prints GREEN or RED. None of them touch 
    - `node tests/damper-save.js unpick` : taking one name off a pick-list sends the shorter list.
    - `node tests/damper-save.js pass`, `paste`, `cell` : the ✓ Pass button, copy/paste and a table cell edit send the right value and show it on the phone straight away.
    - `node tests/damper-save.js new` : a new damper is created with what was typed.
+   - `node tests/airtable-read.js` : a 250-damper job read 100 at a time, with one "slow down" reply, shows every damper.
    - `node tests/save-cancelled.js` : when the phone cancels a save (out of space), the app shows an error instead of hanging.
