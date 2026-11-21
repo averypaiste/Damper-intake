@@ -63,15 +63,6 @@
   .mkpg { display:block; position:relative; width:100%; padding:0; margin:0 0 8px; border:0; border-radius:4px; background:#fff; overflow:hidden; }
   .mkpg canvas { display:block; width:100%; height:auto; }
   .mkpg span { position:absolute; right:6px; top:6px; background:rgba(0,0,0,.65); color:#fff; font-size:12px; padding:2px 8px; border-radius:99px; }
-  .mmtools { display:flex; gap:6px; overflow-x:auto; padding:0 10px 6px; align-items:center; }
-  .mmtools button { flex:0 0 auto; padding:6px 10px; font-size:13px; white-space:nowrap; }
-  .mmtools button.on { background:var(--brand); color:#fff; border-color:var(--brand); }
-  .mmtools button[hidden] { display:none; }
-  .mmhint { color:#ccc; font-size:12px; white-space:nowrap; }
-  .mmstart, .mmpick { width:min(560px, 94vw); }
-  .mmstart > button, .mmstart > label { display:block; width:100%; margin:8px 0; text-align:center; box-sizing:border-box; }
-  .mmplist { max-height:55vh; overflow-y:auto; margin:8px 0; }
-  .mmpick input { width:100%; box-sizing:border-box; }
   .mkw canvas { max-width:100%; max-height:100%; touch-action:none; background:#fff; transform-origin:0 0; }
   .pblock .pbtns .addbtn { flex:1; text-align:center; }
   .pblock .addbtn { padding:6px 12px; font-size:14px; border-radius:8px; background:transparent; color:var(--brand); border:1px solid var(--brand); cursor:pointer; font-weight:600; }
@@ -402,7 +393,7 @@
   </section>
   <section id="home">
     <div class="card">
-      <div class="jobbar"><b id="jobName"></b><button type="button" class="secondary" id="btnMM" hidden>✏️ Map maker</button><button type="button" class="secondary" id="btnMU" hidden>📍 Markup</button><button type="button" class="secondary" id="btnMap" hidden>🗺 Map</button><button type="button" class="secondary" id="btnOffline">⬇ Offline</button></div>
+      <div class="jobbar"><b id="jobName"></b><button type="button" class="secondary" id="btnMU" hidden>📍 Markup</button><button type="button" class="secondary" id="btnMap" hidden>🗺 Map</button><button type="button" class="secondary" id="btnOffline">⬇ Offline</button></div>
       <div hidden><select id="mView"><option value="">All dampers in this table</option></select></div>
       <div class="vrow">
         <select id="mTable" aria-label="View"></select>
@@ -1019,7 +1010,7 @@ const job = {
     return rev;
   },
 };
-const APP_VERSION = '2026-11-21-b (test copy)';
+const APP_VERSION = '2026-11-21-c (test copy)';
 try { document.getElementById('verFoot').textContent = 'Damper Inspection · version ' + APP_VERSION; } catch {}
 let quietRetry = false;
 function report(msg, manual) {
@@ -2227,7 +2218,6 @@ async function renderHome() {
   if (onlyMiss) $('hMiss').append('✕ Missing only (' + nMiss + ')');
   else $('hMiss').append('● ' + nMiss + ' missing');
   const hits = all.filter((n, i) => (!onlyMiss || flagged(n)) && inScope(n, i));
-  mmData = { all, hits, opOf };
   const list = $('dlist'); list.textContent = '';
   const row = (n) => {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'pkitem';
@@ -2282,8 +2272,7 @@ async function renderHome() {
   $('hCount').textContent = countText(hits.length, all.length);
 }
 $('hMiss').onclick = () => { onlyMiss = !onlyMiss; renderHome(); };
-const setFmode = () => { $('fmode').textContent = floorMode ? '▦ Table' : '☰ Checklist'; $('btnMM').hidden = true; $('btnMU').hidden = floorMode; }; // Markup is for Manager view only. Map maker is off the screen (Avery 2026-11-18); its saved maps still show in 🗺 Map and Markup
-$('btnMM').onclick = () => mmStart();
+const setFmode = () => { $('fmode').textContent = floorMode ? '▦ Table' : '☰ Checklist'; $('btnMU').hidden = floorMode; }; // Markup is for Manager view only. Maps drawn with the old Map maker still show in 🗺 Map and Markup
 // Markup: opens the markup tool (markup/, inside this app) on the job's map that is already saved on this device
 $('btnMU').onclick = async () => {
   const c = cfg(), maps = mapsHere(), out = [];
@@ -2634,312 +2623,15 @@ async function locMarkup(file) {
   };
   if (file) { nav.hidden = true; if (!await fromFile(file)) close(); } else await openMap(0);
 }
-/* ---------- Map maker (Manager view): draw a clean floor/room map like the plans, saved on this device ----------
-   Works offline. Each drawing is kept per job (localStorage 'mm') with its picture in the 'beta-mapmaker' cache,
+/* ---------- Maps drawn with the old Map maker (removed 2026-11-21 at Avery's request) ----------
+   The drawings people already made stay usable: each is kept per job (localStorage 'mm') with its picture in the 'beta-mapmaker' cache,
    and shows up in 🗺 Map and in Mark on map. */
 const MMC = 'beta-mapmaker', MMKEY = 'https://local.invalid/mm/';
-var mmData = { all: [], hits: [], opOf: () => "" }; // the damper list, filled in by renderHome (var: renderHome can run first)
 const mmAll = () => getJ('mm') || {};
 const mmJob = () => mmAll()[cfg().base] || [];
-function mmSetJob(list) { const a = mmAll(); if (list.length) a[cfg().base] = list; else delete a[cfg().base]; try { localStorage.setItem('mm', JSON.stringify(a)); } catch { toast('Not enough space on this device to save the map'); } }
 const localMaps = () => mmJob().filter((d) => d.png).map((d) => ({ id: 'mm-' + d.id, fn: d.name + '.png', type: 'image/png', size: d.size || 0, col: 'Map maker', rec: d.name, saved: true, local: d.id }));
-async function mmPut(key, blob) { const c = await caches.open(MMC); await c.put(MMKEY + key, new Response(blob, { headers: { 'Content-Type': blob.type || 'image/png' } })); }
 async function mmGet(key) { const c = await caches.open(MMC).catch(() => null); const r = c && await c.match(MMKEY + key); return r ? r.blob() : null; }
-async function mmDel(id) { const c = await caches.open(MMC).catch(() => null); if (c) { await c.delete(MMKEY + id + '.png'); await c.delete(MMKEY + id + '-bg'); } }
 
-function mmStart() { // pick: new blank map, new from a screenshot, or open a saved one
-  const dlg = document.createElement('dialog'); dlg.className = 'mmstart';
-  const h = document.createElement('h2'); h.textContent = 'Map maker · ' + jobName(cfg().base);
-  const p = document.createElement('p'); p.className = 'hint'; p.textContent = 'Draw a clean map of a floor or room, like the fan room one. Everything is saved on this phone, so it works without signal.';
-  const nb = document.createElement('button'); nb.type = 'button'; nb.textContent = '+ New blank map';
-  const ns = document.createElement('label'); ns.className = 'addbtn'; ns.textContent = '+ New, tracing over a screenshot';
-  const ni = document.createElement('input'); ni.type = 'file'; ni.accept = 'image/*'; ni.hidden = true; ns.append(ni);
-  const list = document.createElement('div');
-  const close = document.createElement('button'); close.type = 'button'; close.className = 'secondary'; close.textContent = 'Close';
-  const draw = () => {
-    list.textContent = '';
-    for (const d of mmJob()) {
-      const r = document.createElement('div'); r.className = 'mapRow';
-      const t = document.createElement('b'); t.textContent = d.name;
-      const s = document.createElement('p'); s.className = 'hint'; s.textContent = 'Saved ' + new Date(d.at).toLocaleString() + ' · ' + d.shapes.filter((x) => x.t === 'damp').length + ' dampers';
-      const row = document.createElement('div'); row.className = 'row';
-      const ed = document.createElement('button'); ed.type = 'button'; ed.textContent = 'Edit';
-      const sv = document.createElement('button'); sv.type = 'button'; sv.className = 'secondary'; sv.textContent = 'Save to Files';
-      const del = document.createElement('button'); del.type = 'button'; del.className = 'secondary'; del.textContent = 'Delete';
-      ed.onclick = async () => { dlg.close(); dlg.remove(); mmEditor(d, await mmGet(d.id + '-bg')); };
-      sv.onclick = async () => { const b = await mmGet(d.id + '.png'); if (b) mmShare(b, d.name); else toast('Save the map first'); };
-      del.onclick = async () => { if (!confirm('Delete the map "' + d.name + '" from this phone?')) return; mmSetJob(mmJob().filter((x) => x.id !== d.id)); await mmDel(d.id); setJobBar(); draw(); };
-      row.append(ed, sv, del); r.append(t, s, row); list.append(r);
-    }
-  };
-  nb.onclick = () => { dlg.close(); dlg.remove(); mmEditor(null, null); };
-  ni.onchange = async () => { const f = ni.files[0]; if (!f) return; dlg.close(); dlg.remove(); mmEditor(null, f); };
-  close.onclick = () => { dlg.close(); dlg.remove(); };
-  dlg.append(h, p, nb, ns, list, close); document.body.append(dlg); dlg.showModal(); draw();
-}
-async function mmShare(blob, name) {
-  const file = new File([blob], name.replace(/[\\/:*?"<>|]+/g, '-') + '.png', { type: 'image/png' });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: name }); } catch {} return; }
-  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60e3);
-}
-
-async function mmEditor(saved, bgFile) {
-  // ----- the picture: a screenshot to trace over (faded, left out of the saved map), or a blank sheet -----
-  let bg = null, W = 2400, H = 1700;
-  if (bgFile) {
-    try { const bmp = await createImageBitmap(bgFile, { imageOrientation: 'from-image' }); const k = Math.min(1, 2400 / Math.max(bmp.width, bmp.height)); W = Math.round(bmp.width * k); H = Math.round(bmp.height * k); bg = document.createElement('canvas'); bg.width = W; bg.height = H; bg.getContext('2d').drawImage(bmp, 0, 0, W, H); bmp.close && bmp.close(); }
-    catch { toast('Could not read that picture'); bg = null; }
-  }
-  if (saved) { W = saved.W; H = saved.H; }
-  const doc = { id: saved ? saved.id : String(Date.now()), name: saved ? saved.name : '', shapes: saved ? JSON.parse(JSON.stringify(saved.shapes)) : [] };
-  const U = Math.max(W, H) / 400, LW = Math.max(3, Math.round(U)), FS = Math.max(14, Math.round(Math.max(W, H) / 70)), GRID = Math.max(2, Math.round(U));
-  let showBg = !!bg, tool = 'outline', sel = null, draft = null, hist = [], dirty = false;
-  const snap = (v) => Math.round(v / GRID) * GRID;
-  const push = () => { hist.push(JSON.stringify(doc.shapes)); if (hist.length > 60) hist.shift(); dirty = true; };
-
-  // ----- screen -----
-  const dlg = document.createElement('dialog'); dlg.className = 'mkdlg mmdlg';
-  const bar = document.createElement('div'); bar.className = 'mkbar';
-  const bClose = document.createElement('button'); bClose.type = 'button'; bClose.className = 'secondary'; bClose.textContent = 'Close';
-  const title = document.createElement('span');
-  const bSave = document.createElement('button'); bSave.type = 'button'; bSave.textContent = 'Save';
-  bar.append(bClose, title, bSave);
-  const tb = document.createElement('div'); tb.className = 'mmtools';
-  const TOOLS = [['move', '✋ Move'], ['outline', '⬠ Outline'], ['room', '▭ Room'], ['stair', '▤ Stairs'], ['door', '◜ Door'], ['door2', '◜◝ Double door'], ['damp', '▣ Damper'], ['text', 'T Text']];
-  const tBtns = {};
-  for (const [k, t] of TOOLS) { const b = document.createElement('button'); b.type = 'button'; b.className = 'secondary'; b.textContent = t; b.onclick = () => { tool = k; draft = null; sel = null; paint(); }; tBtns[k] = b; tb.append(b); }
-  const acts = document.createElement('div'); acts.className = 'mmtools';
-  const bUndo = document.createElement('button'); bUndo.type = 'button'; bUndo.className = 'secondary'; bUndo.textContent = '↶ Undo';
-  const bFlip = document.createElement('button'); bFlip.type = 'button'; bFlip.className = 'secondary'; bFlip.textContent = '⇄ Flip door';
-  const bEdit = document.createElement('button'); bEdit.type = 'button'; bEdit.className = 'secondary'; bEdit.textContent = '✎ Rename';
-  const bDel = document.createElement('button'); bDel.type = 'button'; bDel.className = 'secondary'; bDel.textContent = '🗑 Delete';
-  const bBg = document.createElement('button'); bBg.type = 'button'; bBg.className = 'secondary'; bBg.textContent = '👁 Screenshot';
-  const hint = document.createElement('span'); hint.className = 'mmhint';
-  acts.append(bUndo, bFlip, bEdit, bDel, bBg, hint);
-  const wrap = document.createElement('div'); wrap.className = 'mkw';
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H; wrap.append(cv);
-  dlg.append(bar, tb, acts, wrap); document.body.append(dlg); dlg.showModal();
-  const g = cv.getContext('2d');
-  if (saved && !bg) { const b = await mmGet(saved.id + '-bg'); if (b) { try { const bmp = await createImageBitmap(b); bg = document.createElement('canvas'); bg.width = W; bg.height = H; bg.getContext('2d').drawImage(bmp, 0, 0, W, H); showBg = true; } catch {} } }
-  if (saved && bgFile && bg) showBg = true;
-
-  // ----- drawing each kind of thing, in the floor plan's style -----
-  const dampFill = (s) => MARK_COL[STAT(s.op)];
-  const dampBox = (s) => { g.font = `600 ${FS}px -apple-system, system-ui, sans-serif`; const w = Math.round(g.measureText(s.id).width + FS); return { x: s.lx, y: s.ly, w, h: Math.round(FS * 1.7) }; };
-  const doorGeo = (s) => { // hinge at a; leaf swings to one side of a→b
-    const [ax, ay] = s.a, [bx, by] = s.b, L = Math.hypot(bx - ax, by - ay) || 1, ux = (bx - ax) / L, uy = (by - ay) / L, nx = -uy * s.side, ny = ux * s.side;
-    return { ax, ay, bx, by, L, ux, uy, nx, ny };
-  };
-  function shape(c, s, out) {
-    c.lineJoin = 'round'; c.lineCap = 'butt'; c.setLineDash([]);
-    if (s.t === 'poly') {
-      if (s.pts.length < 2) return;
-      c.beginPath(); s.pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); if (s.closed) c.closePath();
-      c.strokeStyle = '#000'; c.lineWidth = LW; c.stroke();
-    } else if (s.t === 'room') {
-      c.strokeStyle = '#000'; c.lineWidth = LW; c.strokeRect(s.x, s.y, s.w, s.h);
-      if (s.label) {
-        c.fillStyle = '#000'; c.font = `700 ${FS}px -apple-system, system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
-        const words = s.label.split(/\s+/), lines = []; let ln = '';
-        for (const w of words) { const t = ln ? ln + ' ' + w : w; if (ln && c.measureText(t).width > s.w - FS) { lines.push(ln); ln = w; } else ln = t; }
-        if (ln) lines.push(ln);
-        lines.forEach((t, i) => c.fillText(t, s.x + s.w / 2, s.y + s.h / 2 + (i - (lines.length - 1) / 2) * FS * 1.25));
-      }
-    } else if (s.t === 'stair') {
-      const { x, y, w, h } = s, horiz = w >= h, L = horiz ? w : h;
-      c.fillStyle = '#58b948'; c.fillRect(x, y, w, h);
-      c.save(); c.beginPath(); c.rect(x, y, w, h); c.clip(); c.strokeStyle = '#3f6f3a';
-      const a0 = 0.2 * L, a1 = 0.8 * L, step = Math.max(6, U * 2.5);
-      c.lineWidth = Math.max(1, LW / 3);
-      for (let t = a0; t <= a1 + 0.1; t += step) { c.beginPath(); if (horiz) { c.moveTo(x + t, y); c.lineTo(x + t, y + h); } else { c.moveTo(x, y + t); c.lineTo(x + w, y + t); } c.stroke(); }
-      c.lineWidth = Math.max(1.5, LW / 2); c.beginPath(); if (horiz) { c.moveTo(x + a0, y + h / 2); c.lineTo(x + a1, y + h / 2); } else { c.moveTo(x + w / 2, y + a0); c.lineTo(x + w / 2, y + a1); } c.stroke();
-      c.restore();
-      c.strokeStyle = '#e10000'; c.lineWidth = LW * 1.2; c.setLineDash([LW * 3, LW * 0.6, LW * 0.6, LW * 0.6]); c.strokeRect(x, y, w, h); c.setLineDash([]);
-    } else if (s.t === 'door') {
-      const d = doorGeo(s);
-      c.strokeStyle = out ? '#fff' : (showBg ? 'rgba(255,255,255,.9)' : '#fff'); c.lineWidth = LW * 1.6; c.beginPath(); c.moveTo(d.ax, d.ay); c.lineTo(d.bx, d.by); c.stroke();
-      c.strokeStyle = '#000'; c.lineWidth = Math.max(2, LW / 2);
-      const leaf = (hx, hy, dx, dy, r) => { // a leaf from the hinge, and its dashed swing arc back to the jamb
-        const ex = hx + d.nx * r, ey = hy + d.ny * r;
-        c.setLineDash([]); c.beginPath(); c.moveTo(hx, hy); c.lineTo(ex, ey); c.stroke();
-        const a0 = Math.atan2(dy, dx), a1 = Math.atan2(d.ny, d.nx); let da = a1 - a0; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
-        c.setLineDash([LW, LW * 0.8]); c.beginPath(); c.arc(hx, hy, r, a0, a1, da < 0); c.stroke(); c.setLineDash([]);
-      };
-      if (s.dbl) { leaf(d.ax, d.ay, d.ux, d.uy, d.L / 2); leaf(d.bx, d.by, -d.ux, -d.uy, d.L / 2); } else leaf(d.ax, d.ay, d.ux, d.uy, d.L);
-    } else if (s.t === 'text') {
-      c.fillStyle = '#000'; c.font = `600 ${FS}px -apple-system, system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(s.s, s.x, s.y);
-    } else if (s.t === 'damp') {
-      const b = dampBox(s), q = Math.max(8, Math.round(FS * 0.6));
-      const ex = Math.max(b.x, Math.min(s.x, b.x + b.w)), ey = Math.max(b.y, Math.min(s.y, b.y + b.h));
-      c.strokeStyle = '#000'; c.lineWidth = Math.max(1.5, LW / 2.5); c.beginPath(); c.moveTo(s.x, s.y); c.lineTo(ex, ey); c.stroke();
-      c.fillStyle = dampFill(s); c.fillRect(b.x, b.y, b.w, b.h); c.strokeRect(b.x, b.y, b.w, b.h);
-      c.lineWidth = Math.max(2, LW / 2); c.fillRect(s.x - q / 2, s.y - q / 2, q, q); c.strokeRect(s.x - q / 2, s.y - q / 2, q, q);
-      c.fillStyle = '#000'; c.font = `600 ${FS}px -apple-system, system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(s.id, b.x + b.w / 2, b.y + b.h / 2 + 1);
-    }
-  }
-  const ORDER = { poly: 0, room: 1, stair: 2, door: 3, text: 4, damp: 5 };
-  function render(c, out) {
-    c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#fff'; c.fillRect(0, 0, W, H);
-    if (bg && showBg && !out) { c.globalAlpha = 0.35; c.drawImage(bg, 0, 0); c.globalAlpha = 1; }
-    [...doc.shapes].sort((a, b) => ORDER[a.t] - ORDER[b.t]).forEach((s) => shape(c, s, out));
-  }
-  function bbox(s) {
-    if (s.t === 'poly') { const xs = s.pts.map((p) => p[0]), ys = s.pts.map((p) => p[1]); return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }; }
-    if (s.t === 'room' || s.t === 'stair') return { x: s.x, y: s.y, w: s.w, h: s.h };
-    if (s.t === 'door') { const x = Math.min(s.a[0], s.b[0]), y = Math.min(s.a[1], s.b[1]); return { x, y, w: Math.abs(s.a[0] - s.b[0]), h: Math.abs(s.a[1] - s.b[1]) }; }
-    if (s.t === 'text') { g.font = `600 ${FS}px sans-serif`; const w = g.measureText(s.s).width; return { x: s.x - w / 2, y: s.y - FS / 2, w, h: FS }; }
-    const b = dampBox(s); return { x: Math.min(b.x, s.x), y: Math.min(b.y, s.y), w: Math.max(b.x + b.w, s.x) - Math.min(b.x, s.x), h: Math.max(b.y + b.h, s.y) - Math.min(b.y, s.y) };
-  }
-  function paint() {
-    render(g, false);
-    if (draft && draft.t === 'poly') { // the outline being drawn: line so far, and a dot on the first corner to close it
-      shape(g, draft, false); const [x, y] = draft.pts[0]; g.fillStyle = '#1f6feb'; g.beginPath(); g.arc(x, y, LW * 2, 0, 7); g.fill();
-    } else if (draft) shape(g, draft, false);
-    if (sel) { const b = bbox(sel), m = LW * 2; g.strokeStyle = '#1f6feb'; g.lineWidth = Math.max(2, LW / 2); g.setLineDash([LW * 2, LW]); g.strokeRect(b.x - m, b.y - m, b.w + 2 * m, b.h + 2 * m); g.setLineDash([]); }
-    for (const [k, b] of Object.entries(tBtns)) b.classList.toggle('on', k === tool);
-    bFlip.hidden = !(sel && sel.t === 'door'); bEdit.hidden = !(sel && ['room', 'text', 'damp'].includes(sel.t)); bDel.hidden = !sel; bBg.hidden = !bg; bUndo.disabled = !hist.length;
-    bBg.textContent = showBg ? '👁 Hide screenshot' : '👁 Show screenshot';
-    hint.textContent = { move: 'Drag things to move them. Tap one to pick it.', outline: draft ? 'Tap each corner. Tap the blue dot to finish.' : 'Tap each corner of the building or room outline.', room: 'Drag from one corner to the other.', stair: 'Drag from one corner to the other.', door: 'Drag across the doorway, starting at the hinge side.', door2: 'Drag across the doorway.', damp: 'Tap where the damper is.', text: 'Tap where the words go.' }[tool];
-    title.textContent = doc.name || 'New map';
-  }
-  // ----- pinch to zoom; one finger draws (or drags in Move) -----
-  let z = 1, tx = 0, ty = 0, pinch = null, act = null;
-  const ptrs = new Map();
-  const applyZ = () => { cv.style.transform = `translate(${tx}px,${ty}px) scale(${z})`; };
-  const origin = () => { const r = wrap.getBoundingClientRect(); return { x: r.left + cv.offsetLeft, y: r.top + cv.offsetTop }; };
-  const at = (e) => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height }; };
-  const near = (e) => { const r = cv.getBoundingClientRect(); return 22 * W / r.width; }; // a finger's width, in map units
-  const ang45 = (x0, y0, x, y) => { // keep lines straight: snap to 0/45/90°
-    const a = Math.round(Math.atan2(y - y0, x - x0) / (Math.PI / 4)) * (Math.PI / 4), L = Math.hypot(x - x0, y - y0);
-    return [snap(x0 + Math.cos(a) * L), snap(y0 + Math.sin(a) * L)];
-  };
-  const hit = (p, tol) => { // the topmost thing under the finger
-    const segD = (px, py, [x1, y1], [x2, y2]) => { const dx = x2 - x1, dy = y2 - y1, t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / ((dx * dx + dy * dy) || 1))); return Math.hypot(px - x1 - t * dx, py - y1 - t * dy); };
-    const list = [...doc.shapes].sort((a, b) => ORDER[b.t] - ORDER[a.t]);
-    for (const s of list) {
-      if (s.t === 'damp') { const b = dampBox(s); if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) return { s, part: 'label' }; if (Math.hypot(p.x - s.x, p.y - s.y) < tol) return { s, part: 'pt' }; }
-      else if (s.t === 'text') { const b = bbox(s); if (p.x >= b.x - tol / 2 && p.x <= b.x + b.w + tol / 2 && p.y >= b.y - tol / 2 && p.y <= b.y + b.h + tol / 2) return { s }; }
-      else if (s.t === 'door') { if (segD(p.x, p.y, s.a, s.b) < tol) return { s }; }
-      else if (s.t === 'room' || s.t === 'stair') { if (p.x >= s.x - tol / 2 && p.x <= s.x + s.w + tol / 2 && p.y >= s.y - tol / 2 && p.y <= s.y + s.h + tol / 2) return { s }; }
-      else if (s.t === 'poly') { const i = s.pts.findIndex(([x, y]) => Math.hypot(p.x - x, p.y - y) < tol); if (i >= 0) return { s, part: 'v', i }; for (let k = 0; k < s.pts.length - (s.closed ? 0 : 1); k++) if (segD(p.x, p.y, s.pts[k], s.pts[(k + 1) % s.pts.length]) < tol / 2) return { s }; }
-    }
-    return null;
-  };
-  const ask = (q, v) => { const r = prompt(q, v || ''); return r == null ? null : r.trim(); };
-  async function pickDamper() { // a small list of this job's dampers (the ones the filters show first), or type one
-    return new Promise((res) => {
-      const d = document.createElement('dialog'); d.className = 'mmpick';
-      const h = document.createElement('h2'); h.textContent = 'Which damper?';
-      const s = document.createElement('input'); s.type = 'search'; s.placeholder = 'Search or type a damper ID…'; s.autocapitalize = 'characters';
-      const l = document.createElement('div'); l.className = 'mmplist';
-      const used = new Set(doc.shapes.filter((x) => x.t === 'damp').map((x) => x.label));
-      const src = mmData.hits.length ? mmData.hits : mmData.all;
-      const done = (v) => { d.close(); d.remove(); res(v); };
-      const fill = () => {
-        l.textContent = ''; const q = s.value.trim().toLowerCase();
-        const rows = src.filter((n) => !q || n.toLowerCase().includes(q)).slice(0, 80);
-        for (const n of rows) { const b = document.createElement('button'); b.type = 'button'; b.className = 'pkitem'; b.textContent = n + (used.has(n) ? '  ✓ on map' : ''); const op = mmData.opOf(n); if (op) { const c = chipEl(op); c.style.marginLeft = 'auto'; b.append(c); } b.onclick = () => done({ label: n, id: n.replace(/^.*· /, ''), op: mmData.opOf(n) || '' }); l.append(b); }
-        if (q && !rows.some((n) => n.toLowerCase().endsWith(q))) { const b = document.createElement('button'); b.type = 'button'; b.className = 'pkitem'; b.textContent = 'Use "' + s.value.trim() + '"'; b.onclick = () => done({ label: s.value.trim(), id: s.value.trim(), op: '' }); l.prepend(b); }
-      };
-      const x = document.createElement('button'); x.type = 'button'; x.className = 'secondary'; x.textContent = 'Cancel'; x.onclick = () => done(null);
-      s.oninput = fill; d.append(h, s, l, x); document.body.append(d); d.showModal(); fill();
-    });
-  }
-  cv.onpointerdown = async (e) => {
-    cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (ptrs.size === 2) { const [a1, a2] = [...ptrs.values()], o = origin(), mx = (a1.x + a2.x) / 2, my = (a1.y + a2.y) / 2; pinch = { d: Math.hypot(a1.x - a2.x, a1.y - a2.y) || 1, z, cx: (mx - o.x - tx) / z, cy: (my - o.y - ty) / z }; if (act && act.kind === 'rect') draft = null; act = null; paint(); return; }
-    const p = at(e), tol = near(e);
-    act = { kind: 'tap', sx: e.clientX, sy: e.clientY, p, tx, ty, moved: false };
-    if (tool === 'move') { const h = hit(p, tol); if (h) { sel = h.s; act = { kind: 'drag', h, p0: p, snap0: JSON.stringify(h.s), moved: false }; } paint(); }
-    else if (tool === 'room' || tool === 'stair' || tool === 'door' || tool === 'door2') act = { kind: 'rect', p0: { x: snap(p.x), y: snap(p.y) }, moved: false };
-  };
-  cv.onpointermove = (e) => {
-    if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pinch && ptrs.size >= 2) { const [a1, a2] = [...ptrs.values()], o = origin(), mx = (a1.x + a2.x) / 2, my = (a1.y + a2.y) / 2; z = Math.max(1, Math.min(10, pinch.z * Math.hypot(a1.x - a2.x, a1.y - a2.y) / pinch.d)); tx = mx - o.x - pinch.cx * z; ty = my - o.y - pinch.cy * z; if (z === 1) tx = ty = 0; applyZ(); return; }
-    if (!act) return; const p = at(e);
-    if (act.kind === 'tap') { const dx = e.clientX - act.sx, dy = e.clientY - act.sy; if (Math.hypot(dx, dy) > 8) act.moved = true; if (act.moved && z > 1) { tx = act.tx + dx; ty = act.ty + dy; applyZ(); } return; }
-    if (act.kind === 'rect') {
-      act.moved = true; const a = act.p0;
-      if (tool === 'door' || tool === 'door2') { const [bx, by] = ang45(a.x, a.y, p.x, p.y); draft = { t: 'door', a: [a.x, a.y], b: [bx, by], side: 1, dbl: tool === 'door2' }; }
-      else { const x2 = snap(p.x), y2 = snap(p.y); draft = { t: tool, x: Math.min(a.x, x2), y: Math.min(a.y, y2), w: Math.abs(x2 - a.x), h: Math.abs(y2 - a.y), label: '' }; }
-      paint(); return;
-    }
-    if (act.kind === 'drag') {
-      const s = act.h.s, o = JSON.parse(act.snap0), dx = snap(p.x - act.p0.x), dy = snap(p.y - act.p0.y);
-      if (!act.moved && Math.hypot(p.x - act.p0.x, p.y - act.p0.y) < near(e) / 3) return;
-      if (!act.moved) { hist.push(JSON.stringify(doc.shapes)); act.moved = true; dirty = true; }
-      if (s.t === 'poly') { if (act.h.part === 'v') { s.pts[act.h.i] = [o.pts[act.h.i][0] + dx, o.pts[act.h.i][1] + dy]; } else s.pts = o.pts.map(([x, y]) => [x + dx, y + dy]); }
-      else if (s.t === 'door') { s.a = [o.a[0] + dx, o.a[1] + dy]; s.b = [o.b[0] + dx, o.b[1] + dy]; }
-      else if (s.t === 'damp') { if (act.h.part === 'label') { s.lx = o.lx + dx; s.ly = o.ly + dy; } else { s.x = o.x + dx; s.y = o.y + dy; s.lx = o.lx + dx; s.ly = o.ly + dy; } }
-      else { s.x = o.x + dx; s.y = o.y + dy; }
-      paint();
-    }
-  };
-  const up = async (e) => {
-    ptrs.delete(e.pointerId);
-    if (pinch) { if (!ptrs.size) pinch = null; return; }
-    const a = act; act = null; if (!a) return;
-    if (a.kind === 'rect') {
-      if (draft && (draft.t === 'door' ? Math.hypot(draft.b[0] - draft.a[0], draft.b[1] - draft.a[1]) > GRID * 3 : draft.w > GRID * 3 && draft.h > GRID * 3)) {
-        push(); const s = draft; draft = null;
-        if (s.t === 'room') { const l = ask('Room name (optional), like FAN ROOM'); s.label = (l || '').toUpperCase(); }
-        doc.shapes.push(s); sel = s;
-      } else draft = null;
-      paint(); return;
-    }
-    if (a.kind === 'drag') { paint(); return; }
-    if (a.kind !== 'tap' || a.moved || e.type !== 'pointerup') return;
-    const p = a.p, tol = near(e);
-    if (tool === 'move') { const h = hit(p, tol); sel = h ? h.s : null; paint(); return; }
-    if (tool === 'outline') {
-      if (!draft) { draft = { t: 'poly', pts: [[snap(p.x), snap(p.y)]], closed: false }; paint(); return; }
-      const [x0, y0] = draft.pts[0];
-      if (draft.pts.length > 2 && Math.hypot(p.x - x0, p.y - y0) < tol) { push(); draft.closed = true; doc.shapes.push(draft); sel = draft; draft = null; tool = 'move'; paint(); return; }
-      const [lx, ly] = draft.pts[draft.pts.length - 1]; draft.pts.push(ang45(lx, ly, p.x, p.y)); paint(); return;
-    }
-    if (tool === 'text') { const t = ask('Words to show'); if (t) { push(); const s = { t: 'text', x: snap(p.x), y: snap(p.y), s: t }; doc.shapes.push(s); sel = s; } paint(); return; }
-    if (tool === 'damp') {
-      const d = await pickDamper(); if (!d) return;
-      push(); const s = { t: 'damp', x: Math.round(p.x), y: Math.round(p.y), lx: 0, ly: 0, ...d };
-      const b = dampBox({ ...s, lx: 0, ly: 0 }), gap = FS * 3;
-      s.lx = Math.round(Math.max(2, Math.min(W - b.w - 2, p.x + gap))); s.ly = Math.round(Math.max(2, Math.min(H - b.h - 2, p.y - gap - b.h)));
-      doc.shapes.push(s); sel = s; paint();
-    }
-  };
-  cv.onpointerup = up; cv.onpointercancel = up;
-  bUndo.onclick = () => { if (!hist.length) return; doc.shapes = JSON.parse(hist.pop()); sel = null; draft = null; dirty = true; paint(); };
-  bFlip.onclick = () => { if (sel && sel.t === 'door') { push(); sel.side = -sel.side; paint(); } };
-  bEdit.onclick = () => {
-    if (!sel) return;
-    if (sel.t === 'room') { const l = ask('Room name', sel.label); if (l != null) { push(); sel.label = l.toUpperCase(); } }
-    else if (sel.t === 'text') { const l = ask('Words to show', sel.s); if (l) { push(); sel.s = l; } }
-    else if (sel.t === 'damp') { const l = ask('Damper ID on the label', sel.id); if (l) { push(); sel.id = l; } }
-    paint();
-  };
-  bDel.onclick = () => { if (!sel) return; push(); doc.shapes = doc.shapes.filter((s) => s !== sel); sel = null; paint(); };
-  bBg.onclick = () => { showBg = !showBg; paint(); };
-  const save = async () => {
-    if (!doc.name) { const n = ask('Name this map (like 7th floor fan room)'); if (!n) return false; doc.name = n; }
-    // refresh each damper's color from its current test result
-    for (const s of doc.shapes) if (s.t === 'damp' && s.label && mmData.all.includes(s.label)) s.op = mmData.opOf(s.label) || s.op || '';
-    const out = document.createElement('canvas'); out.width = W; out.height = H; render(out.getContext('2d'), true);
-    const png = await new Promise((r) => out.toBlob(r, 'image/png'));
-    try {
-      await mmPut(doc.id + '.png', png);
-      if (bg) await mmPut(doc.id + '-bg', await new Promise((r) => bg.toBlob(r, 'image/jpeg', 0.8)));
-    } catch { toast('Not enough space on this phone to save the map'); return false; }
-    const list = mmJob().filter((x) => x.id !== doc.id);
-    list.unshift({ id: doc.id, name: doc.name, W, H, shapes: doc.shapes, at: Date.now(), png: true, size: png.size });
-    mmSetJob(list); dirty = false; setJobBar(); paint();
-    toast('Map saved on this phone. It shows in 🗺 Map and Mark on map.');
-    return true;
-  };
-  bSave.onclick = save;
-  const close = () => { dlg.close(); dlg.remove(); };
-  bClose.onclick = async () => { if (dirty && confirm('Save your changes first?')) { if (!await save()) return; } close(); };
-  dlg.addEventListener('cancel', (e) => { e.preventDefault(); bClose.onclick(); });
-  paint();
-}
 function applyKeeps() {
   const k = keepVals();
   for (const f of FIELDS) {

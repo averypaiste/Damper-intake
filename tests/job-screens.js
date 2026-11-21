@@ -13,6 +13,7 @@ const rows = [
 ];
 (async () => {
   const b = await chromium.launch(); const ctx = await b.newContext({ serviceWorkers: 'block' }); const p = await ctx.newPage();
+  const errors = []; p.on('pageerror', (e) => errors.push(e.message));
   await ctx.route(/airtable\.com/, async (route) => {
     const u = new URL(route.request().url());
     if (u.pathname === `/v0/meta/bases/${BASE}/tables`) return route.fulfill({ json: { tables: [
@@ -38,8 +39,8 @@ const rows = [
   const label = await p.evaluate(() => getOpts()['Damper IDs'].choices.find((l) => l.includes('FD-1-001')));
   await p.evaluate((l) => openDamper(l), label); await p.waitForTimeout(600);
   const miss = await p.textContent('#missText'), pill = await p.textContent('#dOp');
-  console.log({ bld, flr, label, noteByName: grid.includes('Fusible link missing'), idLeak: /recN0/.test(grid), miss, pill });
-  const ok = bld.join() === 'All buildings,Bldg A,Bldg B' && flr.join() === 'Floor,Floor 1,Floor 2,Floor 3' && grid.includes('Fusible link missing') && !/recN0/.test(grid) && miss === 'No photo of the tag' && pill === 'Fail';
+  console.log({ bld, flr, label, noteByName: grid.includes('Fusible link missing'), idLeak: /recN0/.test(grid), miss, pill, errors });
+  const ok = bld.join() === 'All buildings,Bldg A,Bldg B' && flr.join() === 'Floor,Floor 1,Floor 2,Floor 3' && grid.includes('Fusible link missing') && !/recN0/.test(grid) && miss === 'No photo of the tag' && pill === 'Fail' && !errors.length;
   console.log(ok ? 'GREEN' : 'RED');
   await b.close();
 })();

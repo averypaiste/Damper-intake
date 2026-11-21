@@ -15,4 +15,5 @@ Small browser checks (Playwright). Each prints GREEN or RED. None of them touch 
    - `node tests/job-screens.js` : building and floor filters, linked notes shown by name, the missing-info box and the result pill.
    - `node tests/markup-engine.js [url]` : puts labels on a page, tidies them, exports a picture and a PDF, and prints a fingerprint of the picture (the same fingerprint before and after a change = the same drawing).
    - `node tests/location-pic.js` : Location Pic "Mark on map" draws the label and adds the picture (saves location-pic.png to look at).
+   - `node tests/old-maps.js` : a map drawn with the old Map maker still shows up and opens in Markup.
    - `node tests/save-cancelled.js` : when the phone cancels a save (out of space), the app shows an error instead of hanging.
