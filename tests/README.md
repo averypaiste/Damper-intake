@@ -13,4 +13,6 @@ Small browser checks (Playwright). Each prints GREEN or RED. None of them touch 
    - `node tests/damper-save.js new` : a new damper is created with what was typed.
    - `node tests/airtable-read.js` : a 250-damper job read 100 at a time, with one "slow down" reply, shows every damper.
    - `node tests/job-screens.js` : building and floor filters, linked notes shown by name, the missing-info box and the result pill.
+   - `node tests/markup-engine.js [url]` : puts labels on a page, tidies them, exports a picture and a PDF, and prints a fingerprint of the picture (the same fingerprint before and after a change = the same drawing).
+   - `node tests/location-pic.js` : Location Pic "Mark on map" draws the label and adds the picture (saves location-pic.png to look at).
    - `node tests/save-cancelled.js` : when the phone cancels a save (out of space), the app shows an error instead of hanging.

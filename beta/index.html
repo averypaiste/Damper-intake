@@ -609,6 +609,7 @@
   </div>
 </dialog>
 
+<script src="markup/markup-engine.js"></script>
 <script>
 // TEST COPY at /beta/: keeps its own settings, saved data and entries waiting to sync, separate from the main app.
 // The first time it opens it copies the main app's connection settings so the token does not have to be typed again.
@@ -1018,7 +1019,7 @@ const job = {
     return rev;
   },
 };
-const APP_VERSION = '2026-11-21-a (test copy)';
+const APP_VERSION = '2026-11-21-b (test copy)';
 try { document.getElementById('verFoot').textContent = 'Damper Inspection · version ' + APP_VERSION; } catch {}
 let quietRetry = false;
 function report(msg, manual) {
@@ -2446,7 +2447,13 @@ async function locMarkup(file) {
   const list = document.createElement('div'); list.className = 'mklist'; list.hidden = true; // every page, top to bottom
   dlg.append(bar, nav, wrap, list); document.body.append(dlg); dlg.showModal();
   const g = cv.getContext('2d');
-  let W = 0, H = 0, px = null, base = null, u = 1, sq = 8, fs = 12, font = '', bw = 0, bh = 0;
+  let W = 0, H = 0, px = null, base = null, u = 1, ms = 1, bw = 0, bh = 0;
+  // The label is drawn by the Markup tool's own engine (markup/markup-engine.js), so it looks like the Markup labels
+  const mark = () => ({ id: text, note: '', fill, ink: 'black', style: 'line', x: pt.x, y: pt.y, bx: lab.x, by: lab.y, s: ms });
+  const sizeTo = (unit) => { // unit = 1/100 of what is on screen, so the label looks the same zoomed in or out
+    u = unit; ms = Math.max(12, u * 1.4) / 20; // the engine's ID text is 20 x size
+    const L = MarkupEngine.layout({ id: text, s: ms, style: 'line' }); bw = Math.round(L.w); bh = Math.round(L.h);
+  };
   let pt = null, lab = null, moved = false, drag = null, doc = null, page = 1, busy = false;
   let resetZoom = () => {};
   const close = () => { dlg.close(); dlg.remove(); if (doc) doc.destroy(); };
@@ -2457,10 +2464,7 @@ async function locMarkup(file) {
     const bx = base.getContext('2d'); bx.fillStyle = '#fff'; bx.fillRect(0, 0, W, H); bx.drawImage(src, 0, 0, W, H);
     px = bx.getImageData(0, 0, W, H).data;
     cv.width = W; cv.height = H;
-    u = Math.max(W, H) / 100; // one drawing unit, so the marks look the same on any size of picture
-    sq = Math.max(8, Math.round(u * 0.8)); fs = Math.max(12, Math.round(u * 1.4));
-    font = `600 ${fs}px -apple-system, system-ui, sans-serif`; g.font = font;
-    bw = Math.round(g.measureText(text).width + fs); bh = Math.round(fs * 1.7);
+    sizeTo(Math.max(W, H) / 100); // one drawing unit, so the marks look the same on any size of picture
     pt = null; lab = null; moved = false; ok.disabled = true; resetZoom(); draw();
   };
   const fromFile = async (f) => {
@@ -2546,12 +2550,7 @@ async function locMarkup(file) {
     if (!base) return;
     g.drawImage(base, 0, 0);
     if (!pt) return;
-    const ex = Math.max(lab.x, Math.min(pt.x, lab.x + bw)), ey = Math.max(lab.y, Math.min(pt.y, lab.y + bh));
-    g.strokeStyle = '#000'; g.lineWidth = Math.max(1.5, u * 0.22);
-    g.beginPath(); g.moveTo(pt.x, pt.y); g.lineTo(ex, ey); g.stroke();
-    g.fillStyle = fill; g.fillRect(lab.x, lab.y, bw, bh); g.strokeRect(lab.x, lab.y, bw, bh);
-    g.lineWidth = Math.max(2, u * 0.3); g.fillRect(pt.x - sq / 2, pt.y - sq / 2, sq, sq); g.strokeRect(pt.x - sq / 2, pt.y - sq / 2, sq, sq);
-    g.fillStyle = '#000'; g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, lab.x + bw / 2, lab.y + bh / 2 + 1);
+    g.save(); MarkupEngine.drawMark(g, mark(), false); g.restore();
   }
   const at = (e) => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height }; };
   // pinch to zoom, drag to move around, tap to place the square, drag the label to move it
@@ -2602,8 +2601,7 @@ async function locMarkup(file) {
       { // size the marks to what is on screen, so they look the same zoomed in or out
         const r = cv.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
         const vis = Math.max((Math.min(r.right, wr.right) - Math.max(r.left, wr.left)) * W / r.width, (Math.min(r.bottom, wr.bottom) - Math.max(r.top, wr.top)) * H / r.height);
-        u = Math.max(4, vis / 100); sq = Math.max(8, Math.round(u * 0.8)); fs = Math.max(12, Math.round(u * 1.4));
-        font = `600 ${fs}px -apple-system, system-ui, sans-serif`; g.font = font; bw = Math.round(g.measureText(text).width + fs); bh = Math.round(fs * 1.7);
+        sizeTo(Math.max(4, vis / 100));
         if (lab) lab = { x: Math.max(0, Math.min(W - bw, lab.x)), y: Math.max(0, Math.min(H - bh, lab.y)) };
       }
       if (!moved) place();
