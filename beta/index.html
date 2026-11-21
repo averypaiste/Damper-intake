@@ -63,15 +63,6 @@
   .mkpg { display:block; position:relative; width:100%; padding:0; margin:0 0 8px; border:0; border-radius:4px; background:#fff; overflow:hidden; }
   .mkpg canvas { display:block; width:100%; height:auto; }
   .mkpg span { position:absolute; right:6px; top:6px; background:rgba(0,0,0,.65); color:#fff; font-size:12px; padding:2px 8px; border-radius:99px; }
-  .mmtools { display:flex; gap:6px; overflow-x:auto; padding:0 10px 6px; align-items:center; }
-  .mmtools button { flex:0 0 auto; padding:6px 10px; font-size:13px; white-space:nowrap; }
-  .mmtools button.on { background:var(--brand); color:#fff; border-color:var(--brand); }
-  .mmtools button[hidden] { display:none; }
-  .mmhint { color:#ccc; font-size:12px; white-space:nowrap; }
-  .mmstart, .mmpick { width:min(560px, 94vw); }
-  .mmstart > button, .mmstart > label { display:block; width:100%; margin:8px 0; text-align:center; box-sizing:border-box; }
-  .mmplist { max-height:55vh; overflow-y:auto; margin:8px 0; }
-  .mmpick input { width:100%; box-sizing:border-box; }
   .mkw canvas { max-width:100%; max-height:100%; touch-action:none; background:#fff; transform-origin:0 0; }
   .pblock .pbtns .addbtn { flex:1; text-align:center; }
   .pblock .addbtn { padding:6px 12px; font-size:14px; border-radius:8px; background:transparent; color:var(--brand); border:1px solid var(--brand); cursor:pointer; font-weight:600; }
@@ -402,7 +393,7 @@
   </section>
   <section id="home">
     <div class="card">
-      <div class="jobbar"><b id="jobName"></b><button type="button" class="secondary" id="btnMM" hidden>✏️ Map maker</button><button type="button" class="secondary" id="btnMU" hidden>📍 Markup</button><button type="button" class="secondary" id="btnMap" hidden>🗺 Map</button><button type="button" class="secondary" id="btnOffline">⬇ Offline</button></div>
+      <div class="jobbar"><b id="jobName"></b><button type="button" class="secondary" id="btnMU" hidden>📍 Markup</button><button type="button" class="secondary" id="btnMap" hidden>🗺 Map</button><button type="button" class="secondary" id="btnOffline">⬇ Offline</button></div>
       <div hidden><select id="mView"><option value="">All dampers in this table</option></select></div>
       <div class="vrow">
         <select id="mTable" aria-label="View"></select>
@@ -609,6 +600,7 @@
   </div>
 </dialog>
 
+<script src="markup/markup-engine.js"></script>
 <script>
 // TEST COPY at /beta/: keeps its own settings, saved data and entries waiting to sync, separate from the main app.
 // The first time it opens it copies the main app's connection settings so the token does not have to be typed again.
@@ -722,6 +714,7 @@ async function tx(mode, fn) {
     const out = fn(s);
     t.oncomplete = () => res(out && out.result !== undefined ? out.result : undefined);
     t.onerror = () => rej(t.error);
+    t.onabort = () => rej(t.error || new Error('Saving was cancelled (the phone may be out of space)')); // a full phone cancels the save this way
   });
 }
 const putItem = (it) => tx('readwrite', (s) => s.put(it));
@@ -753,13 +746,7 @@ function openPicker(f, target) {
   $('pkClose').className = multi ? '' : 'secondary';
   const dlg = $('picker'), search = $('pkSearch'), list = $('pkList');
   $('pkTitle').textContent = f.label || f.key;
-  // Building comes from the label ("Building A · FD-1-011"); floor is the 2nd number in the ID (FD-2-009 = floor 2)
-  const parts = (n) => {
-    const i = n.indexOf(' · '), id = i < 0 ? n : n.slice(i + 3);
-    const m = id.match(/^[^\d]*?\d*[-\s_.]+(\d+)[-\s_.]/);
-    return { b: i < 0 ? '' : n.slice(0, i), fl: m ? String(parseInt(m[1], 10)) : '' };
-  };
-  const info = all.map(parts);
+  const info = all.map(job.place);
   const bl = [...new Set(info.map((x) => x.b).filter(Boolean))];
   const fl = [...new Set(info.map((x) => x.fl).filter(Boolean))].sort((a, b) => a - b);
   const bSel = $('pkBld'), fSel = $('pkFlr'), box = $('pkFilters');
@@ -820,10 +807,31 @@ async function saveDetail(d) { try { await (await caches.open('beta-data')).put(
 async function loadDetail() { try { const r = await (await caches.open('beta-data')).match(DKEY); return r ? await r.json() : null; } catch { return null; } }
 // When a damper is picked, fill the form with whatever Airtable already has for it
 let lastFilled = {};
+// What Airtable had for the open damper, as the form shows it. Closing the page sends only the fields that differ from
+// this, so a value the office changed meanwhile is not overwritten, and a value the tech emptied is emptied in Airtable too.
+// null = not known (list not loaded): then every filled-in field is sent, as before.
+let airVals = null;
+const sameVal = (a, b) => (Array.isArray(a) || Array.isArray(b))
+  ? JSON.stringify([].concat(a || []).map(String).sort()) === JSON.stringify([].concat(b || []).map(String).sort())
+  : String(a == null ? '' : a).trim() === String(b == null ? '' : b).trim();
 async function applyFill(label) {
-  const ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key], recId = o && o.recs && o.recs[label];
+  const recId = job.recId(label);
   const d = await loadDetail();
   const mine = (d && d.fill && recId && d.fill[recId]) || {};
+  airVals = null;
+  if (d && d.fill && recId) { // the same names the form uses (linked records: their names, not their record IDs)
+    airVals = {};
+    for (const f of FIELDS) {
+      if (f.existing || f.newOnly) continue;
+      let v = mine[f.key];
+      if (f.multi) {
+        v = v == null ? [] : Array.isArray(v) ? v : [v];
+        const po = getOpts()[f.key] || {};
+        if (po.type === 'multipleRecordLinks') { const inv = job.linkNames(f.key); v = v.map((id) => inv[id]).filter(Boolean); } // the same ones the form can show
+      }
+      airVals[f.key] = v == null ? '' : v;
+    }
+  }
   // undo what the previous damper filled in (only if the tech did not change it since)
   for (const [k, v] of Object.entries(lastFilled)) { const f = FIELDS.find((x) => x.key === k), el = f && $(fid(k)); if (el && el.value === v) { const kk = keepVals(); el.value = f.keep ? (kk[k] || (f.type === 'date' ? today() : '')) : ''; if (f.multi) el.dataset.sel = f.keep ? (kk[k + '#sel'] || '') : ''; } }
   lastFilled = {};
@@ -833,12 +841,12 @@ async function applyFill(label) {
     const el = $(fid(f.key)), po = getOpts()[f.key] || {};
     if (f.multi) {
       let names = val;
-      if (po.type === 'multipleRecordLinks') { const inv = {}; for (const [lb, id] of Object.entries(po.recs || {})) inv[id] = lb; names = val.map((id) => inv[id]).filter(Boolean); }
+      if (po.type === 'multipleRecordLinks') { const inv = job.linkNames(f.key); names = val.map((id) => inv[id]).filter(Boolean); }
       if (!names.length) continue;
       el.dataset.sel = JSON.stringify(names); el.value = names.join(', ');
     } else {
       el.value = val;
-      if (el.value !== val) continue; // not one of the list's choices
+      if (el.value !== val) { if (airVals) airVals[f.key] = ''; continue; } // the box can't show it: never send it as "emptied"
     }
     lastFilled[f.key] = el.value;
   }
@@ -848,7 +856,7 @@ function hideInfo() { clearEx(); const i = $('info'); if (i) { i.hidden = true; 
 let infoSeq = 0;
 async function showInfo(label) {
   const inf = $('info'); if (!inf) return;
-  const ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key], recId = o && o.recs && o.recs[label];
+  const recId = job.recId(label);
   const seq = ++infoSeq;
   if (!recId) { hideInfo(); return; }
   const d = await loadDetail();
@@ -928,7 +936,7 @@ $('viewer').addEventListener('close', () => { $('viewerImg').removeAttribute('sr
 const PKEY = 'https://local.invalid/photo/';
 let photoJob = false;
 function setDl(msg) { const e = $('dl'); if (!e) return; e.hidden = !msg; e.textContent = msg || ''; }
-async function savePhotos(c, t, viewQ, photoNames) {
+async function savePhotos(c, t, vid, photoNames) {
   if (photoJob || !navigator.onLine || !photoNames.length) return;
   photoJob = true;
   let done = 0, failed = 0, total = 0, lastWhy = '', lastWhyText = '';
@@ -936,23 +944,16 @@ async function savePhotos(c, t, viewQ, photoNames) {
     const cache = await caches.open('beta-photos');
     const have = new Set((await cache.keys()).map((r) => r.url.slice(PKEY.length)));
     const pics = {}, todo = [], seen = new Set(), off = isOffline(c.base), base = c.base;
-    let offset = '';
-    for (let pg = 0; pg < 100; pg++) {
-      const r = await airtableGet(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}?pageSize=100${photoNames.map((n) => '&fields%5B%5D=' + encodeURIComponent(n)).join('')}${viewQ}${offset ? '&offset=' + encodeURIComponent(offset) : ''}`, { headers: { Authorization: 'Bearer ' + c.token } });
-      if (!r.ok) break;
-      const j = await r.json();
-      for (const rec of j.records) for (const n of photoNames) {
-        const at = rec.fields[n]; if (!Array.isArray(at)) continue;
-        for (const a of at) {
-          (pics[rec.id] ||= {})[n] ||= [];
-          const u = a.thumbnails && (a.thumbnails.large || a.thumbnails.small || {}).url;
-          pics[rec.id][n].push({ id: a.id, fn: a.filename || '', u: u || '' });
-          seen.add(a.id);
-          if (off && u && !have.has(a.id)) todo.push({ id: a.id, u });
-        }
+    const { records } = await readAll(tableRef(c), { fields: photoNames, view: vid, base: c.base, token: c.token }); // a failed page keeps what came before it
+    for (const rec of records) for (const n of photoNames) {
+      const at = rec.fields[n]; if (!Array.isArray(at)) continue;
+      for (const a of at) {
+        (pics[rec.id] ||= {})[n] ||= [];
+        const u = a.thumbnails && (a.thumbnails.large || a.thumbnails.small || {}).url;
+        pics[rec.id][n].push({ id: a.id, fn: a.filename || '', u: u || '' });
+        seen.add(a.id);
+        if (off && u && !have.has(a.id)) todo.push({ id: a.id, u });
       }
-      if (!j.offset) break;
-      offset = j.offset;
     }
     if (cfg().base !== base) return; // switched to another job meanwhile
     const d = await loadDetail(), prev = [];
@@ -990,7 +991,26 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-18-c (test copy)';
+/* ---------- The job on this phone: the dampers loaded from Airtable for the open job ----------
+   Screens ask these questions instead of digging through the saved lists themselves. */
+const job = {
+  idField: () => FIELDS.find((f) => f.existing), // the form's "Damper IDs" field (read only, never written)
+  recs: () => (getOpts()[job.idField().key] || {}).recs || {}, // label -> Airtable row
+  dampers: () => (getOpts()[job.idField().key] || {}).choices || [], // labels as the list shows them: "Bldg A · FD-1-011"
+  loaded: () => Object.keys(job.recs()).length > 0,
+  recId: (label) => (label && job.recs()[label]) || '',
+  place(label) { // building from the label; floor is the 2nd number in the ID (FD-2-009 = floor 2)
+    const i = label.indexOf(' · '), id = i < 0 ? label : label.slice(i + 3);
+    const m = id.match(/^[^\d]*?\d*[-\s_.]+(\d+)[-\s_.]/);
+    return { b: i < 0 ? '' : label.slice(0, i), fl: m ? String(parseInt(m[1], 10)) : '' };
+  },
+  linkNames(key) { // linked-record IDs -> the names people see (Inspection Note - Select…); one field, or all of them
+    const rev = {};
+    for (const [k, o] of Object.entries(getOpts() || {})) if ((!key || k === key) && o && o.type === 'multipleRecordLinks' && o.recs) for (const [nm, id] of Object.entries(o.recs)) rev[id] = nm;
+    return rev;
+  },
+};
+const APP_VERSION = '2026-11-21-c (test copy)';
 try { document.getElementById('verFoot').textContent = 'Damper Inspection · version ' + APP_VERSION; } catch {}
 let quietRetry = false;
 function report(msg, manual) {
@@ -1011,15 +1031,13 @@ function report(msg, manual) {
   const r = $('sResult'); if (r) { r.textContent = msg; r.style.fontWeight = '600'; r.style.color = 'var(--ink)'; }
 }
 // With no column chosen in Settings, use "Damper ID" or "Damper IDs", whichever actually has the IDs in it
-async function pickIdColumn(t, c, viewQ) {
+async function pickIdColumn(t, c, vid) {
   const names = ['damper ids', 'damper id'];
   const cands = t.fields.filter((x) => names.includes(x.name.trim().toLowerCase()));
   if (!cands.length) return findField(t, 'Damper IDs');
   if (cands.length === 1) return cands[0];
-  const qs = cands.map((x) => 'fields%5B%5D=' + encodeURIComponent(x.name)).join('&');
-  const rr = await airtableGet(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}?pageSize=100&${qs}${viewQ}`, { headers: { Authorization: 'Bearer ' + c.token } });
-  if (!rr.ok) return cands[0];
-  const rows = (await rr.json()).records;
+  const { records: rows, status } = await readAll(tableRef(c), { fields: cands.map((x) => x.name), view: vid, maxPages: 1, base: c.base, token: c.token }); // the first 100 rows are enough to tell
+  if (status) return cands[0];
   const filled = (x) => rows.filter((r) => { const v = Array.isArray(r.fields[x.name]) ? r.fields[x.name][0] : r.fields[x.name]; return v != null && typeof v !== 'object' && String(v).trim() !== ''; }).length;
   return cands.map((x) => ({ x, n: filled(x) })).sort((a, b) => b.n - a.n)[0].x;
 }
@@ -1066,7 +1084,6 @@ async function refreshOptionsInner(manual) {
     const hiddenNames = [...new Set([...FIELDS.filter((f) => !f.existing && !f.newOnly).map((f) => f.key), ...PHOTOS, ...INFO_FIELDS, MISS_FIELD])]
       .filter((n) => { const fd = findField(t, n, vis); return fd && !vis(fd); });
     localStorage.setItem('hidden', JSON.stringify(hiddenNames));
-    const viewQ = vid ? '&view=' + encodeURIComponent(vid) : ''; // a picked view (e.g. one building's Tech View) shows only its rows
     const out = {}, missing = [], problems = [], names = {}, notes = [];
     let pendingDetail = null, pendingRaw = {};
     for (const f of FIELDS) {
@@ -1076,7 +1093,7 @@ async function refreshOptionsInner(manual) {
         continue;
       }
       const want = f.existing && c.idField ? c.idField : f.key;
-      const fld = f.existing && !c.idField ? await pickIdColumn(t, c, viewQ) : findField(t, want, vis);
+      const fld = f.existing && !c.idField ? await pickIdColumn(t, c, vid) : findField(t, want, vis);
       if (!fld) { missing.push(want); continue; }
       names[f.key] = fld.name;
       if (!f.existing && COMPUTED.test(fld.type)) problems.push('"' + fld.name + '" is a calculated column in Airtable (' + fld.type + '), so nothing can be saved to it. Is there another column with a similar name?');
@@ -1088,18 +1105,12 @@ async function refreshOptionsInner(manual) {
         const pf = lt && (lt.fields.find((x) => x.id === lt.primaryFieldId) || lt.fields[0]);
         const recs = {};
         if (pf) {
-          let lo = '';
-          for (let pg = 0; pg < 50; pg++) {
-            const lr = await airtableGet(`https://api.airtable.com/v0/${c.base}/${lt.id}?pageSize=100&fields%5B%5D=${encodeURIComponent(pf.name)}${lo ? '&offset=' + encodeURIComponent(lo) : ''}`, { headers: { Authorization: 'Bearer ' + c.token } });
-            if (!lr.ok) { problems.push('Could not read the choices for "' + fld.name + '" from the "' + lt.name + '" table (error ' + lr.status + ').'); break; }
-            const ld = await lr.json();
-            for (const x of ld.records) {
-              const base = plain(x.fields[pf.name]); if (!base) continue;
-              let k = base, n = 2; while (recs[k]) k = `${base} (${n++})`;
-              recs[k] = x.id;
-            }
-            if (!ld.offset) break;
-            lo = ld.offset;
+          const { records, status } = await readAll(lt.id, { fields: [pf.name], maxPages: 50, base: c.base, token: c.token });
+          if (status) problems.push('Could not read the choices for "' + fld.name + '" from the "' + lt.name + '" table (error ' + status + ').');
+          for (const x of records) {
+            const base = plain(x.fields[pf.name]); if (!base) continue;
+            let k = base, n = 2; while (recs[k]) k = `${base} (${n++})`;
+            recs[k] = x.id;
           }
         }
         out[f.key].recs = recs;
@@ -1119,15 +1130,9 @@ async function refreshOptionsInner(manual) {
           const lt = tables.find((x) => x.id === tid);
           const pf = lt && (lt.fields.find((x) => x.id === lt.primaryFieldId) || lt.fields[0]);
           if (!pf) return;
-          let lo = '';
-          for (let pg = 0; pg < 50; pg++) {
-            const lr = await airtableGet(`https://api.airtable.com/v0/${c.base}/${lt.id}?pageSize=100&fields%5B%5D=${encodeURIComponent(pf.name)}${lo ? '&offset=' + encodeURIComponent(lo) : ''}`, { headers: { Authorization: 'Bearer ' + c.token } });
-            if (!lr.ok) { problems.push('Could not read names from the "' + lt.name + '" table (error ' + lr.status + ').'); break; }
-            const ld = await lr.json();
-            for (const x of ld.records) linkNames[tid][x.id] = plain(x.fields[pf.name]);
-            if (!ld.offset) break;
-            lo = ld.offset;
-          }
+          const { records, status } = await readAll(lt.id, { fields: [pf.name], maxPages: 50, base: c.base, token: c.token });
+          if (status) problems.push('Could not read names from the "' + lt.name + '" table (error ' + status + ').');
+          for (const x of records) linkNames[tid][x.id] = plain(x.fields[pf.name]);
         };
         // every column except photos/buttons is saved so the whole record can be shown offline
         const infoFields = t.fields.filter((x) => vis(x) && (/Attachment/i.test(x.type) || INFO_FIELDS.some((n) => norm(n) === norm(x.name))));
@@ -1148,31 +1153,23 @@ async function refreshOptionsInner(manual) {
         // the form's own fields are fetched too, so they can be filled in from what Airtable already has
         const fillCols = FIELDS.filter((x) => !x.existing && !x.newOnly).map((x) => ({ key: x.key, fd: findField(t, x.key, vis) })).filter((x) => x.fd && vis(x.fd));
         const wantCols = [...new Set([fld.name, ...(bcol ? [bcol.name] : []), ...showCols.map((x) => x.name), ...fillCols.map((x) => x.fd.name), ...(missCol ? [missCol.name] : [])])];
-        const colsQ = wantCols.map((n) => '&fields%5B%5D=' + encodeURIComponent(n)).join('');
-        let offset = '', scanned = 0;
-        for (let page = 0; page < 50; page++) {
-          const rr = await airtableGet(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}?pageSize=100${colsQ}${viewQ}${offset ? '&offset=' + encodeURIComponent(offset) : ''}`,
-            { headers: { Authorization: 'Bearer ' + c.token } });
-          if (!rr.ok) { report('Could not finish loading the dampers (error ' + rr.status + '). Your last list was kept.', manual); return; }
-          const d = await rr.json();
-          scanned += d.records.length;
-          for (const rec of d.records) {
-            let v = rec.fields[fld.name];
-            if (Array.isArray(v)) v = v[0];
-            if (v == null || typeof v === 'object') continue;
-            const id = String(v).trim();
-            if (!id) continue;
-            rows.push({ id, b: bcol ? bval(rec.fields[bcol.name]) : '', rec: rec.id });
-            const o1 = {};
-            for (const x of showCols) { const dv = disp(rec.fields[x.name], x); if (dv !== '') o1[x.name] = dv; }
-            det[rec.id] = o1;
-            if (missCol) { const mv = disp(rec.fields[missCol.name], missCol).trim(); if (mv) flags[rec.id] = mv.slice(0, 1500); }
-            const rf = {};
-            for (const x of fillCols) if (rec.fields[x.fd.name] != null) rf[x.key] = rec.fields[x.fd.name];
-            rawFill[rec.id] = rf;
-          }
-          if (!d.offset) break;
-          offset = d.offset;
+        const { records: allRecs, status: rowsErr } = await readAll(tableRef(c), { fields: wantCols, view: vid, maxPages: 50, base: c.base, token: c.token });
+        if (rowsErr) { report('Could not finish loading the dampers (error ' + rowsErr + '). Your last list was kept.', manual); return; }
+        const scanned = allRecs.length;
+        for (const rec of allRecs) {
+          let v = rec.fields[fld.name];
+          if (Array.isArray(v)) v = v[0];
+          if (v == null || typeof v === 'object') continue;
+          const id = String(v).trim();
+          if (!id) continue;
+          rows.push({ id, b: bcol ? bval(rec.fields[bcol.name]) : '', rec: rec.id });
+          const o1 = {};
+          for (const x of showCols) { const dv = disp(rec.fields[x.name], x); if (dv !== '') o1[x.name] = dv; }
+          det[rec.id] = o1;
+          if (missCol) { const mv = disp(rec.fields[missCol.name], missCol).trim(); if (mv) flags[rec.id] = mv.slice(0, 1500); }
+          const rf = {};
+          for (const x of fillCols) if (rec.fields[x.fd.name] != null) rf[x.key] = rec.fields[x.fd.name];
+          rawFill[rec.id] = rf;
         }
         // Sort by building, then ID, and put the building in front so the same number in two buildings is easy to tell apart
         const cmp = (x, y) => x.localeCompare(y, undefined, { numeric: true });
@@ -1197,18 +1194,11 @@ async function refreshOptionsInner(manual) {
         // Airtable does not expose the collaborator list, so collect people already used in this column
         const people = {};
         for (const p of f.people || []) people[p.name] = { email: p.email };
-        let offset = '';
-        for (let page = 0; page < 10; page++) {
-          const rr = await airtableGet(`https://api.airtable.com/v0/${c.base}/${encodeURIComponent(tableRef(c))}?pageSize=100&fields%5B%5D=${encodeURIComponent(fld.name)}${offset ? '&offset=' + encodeURIComponent(offset) : ''}`,
-            { headers: { Authorization: 'Bearer ' + c.token } });
-          if (!rr.ok) { problems.push('Could not read the ' + fld.name + ' column (error ' + rr.status + '). The token needs data.records:read.'); break; }
-          const d = await rr.json();
-          for (const rec of d.records) {
-            const v = rec.fields[fld.name];
-            for (const u of Array.isArray(v) ? v : v ? [v] : []) if (u && (u.name || u.email)) people[u.name || u.email] = { id: u.id, email: u.email };
-          }
-          if (!d.offset) break;
-          offset = d.offset;
+        const { records: pRecs, status: pErr } = await readAll(tableRef(c), { fields: [fld.name], maxPages: 10, base: c.base, token: c.token });
+        if (pErr) problems.push('Could not read the ' + fld.name + ' column (error ' + pErr + '). The token needs data.records:read.');
+        for (const rec of pRecs) {
+          const v = rec.fields[fld.name];
+          for (const u of Array.isArray(v) ? v : v ? [v] : []) if (u && (u.name || u.email)) people[u.name || u.email] = { id: u.id, email: u.email };
         }
         // also list everyone who has access to the base (Airtable gives their emails, not names)
         try {
@@ -1259,7 +1249,7 @@ async function refreshOptionsInner(manual) {
       const keepPics = await loadDetail();
       pendingDetail.pics = (keepPics && keepPics.pics) || {};
       await saveDetail(pendingDetail);
-      savePhotos(c, t, viewQ, pendingDetail.photos); // runs in the background
+      savePhotos(c, t, vid, pendingDetail.photos); // runs in the background
     }
     const noPics = [];
     for (const name of PHOTOS) { const fl = findField(t, name, vis); if (fl) names[name] = fl.name; if (!fl || !vis(fl)) noPics.push(name); }
@@ -1271,7 +1261,7 @@ async function refreshOptionsInner(manual) {
     for (const f of FIELDS) snap[f.key] = { v: $(fid(f.key)).value, sel: $(fid(f.key)).dataset.sel || '' };
     buildFields();
     for (const f of FIELDS) { const e = $(fid(f.key)); if (snap[f.key].v !== '') e.value = snap[f.key].v; if (snap[f.key].sel) e.dataset.sel = snap[f.key].sel; }
-    const ef = FIELDS.find((f) => f.existing), eo = out[ef.key];
+    const ef = job.idField(), eo = out[ef.key];
     if ($(fid(ef.key)).value) showInfo($(fid(ef.key)).value);
     const summary = FIELDS.filter((f) => f.type === 'select').map((f) => {
       const o = out[f.key]; if (!o) return f.key + ': not found';
@@ -1325,6 +1315,23 @@ async function airtableGet(url, init) {
   }
   await pace();
   return fetch(url, init);
+}
+// Every row of a table (100 at a time, as Airtable hands them out), with only the columns asked for.
+// view: a view ID (only its rows, in its order). Gives { records, status }: status 0 = all rows came back,
+// otherwise the error code of the page that failed, and records holds the rows read before it.
+async function readAll(table, { fields = [], view = '', maxPages = 100, base = cfg().base, token = cfg().token } = {}) {
+  const records = [];
+  let offset = '';
+  for (let pg = 0; pg < maxPages; pg++) {
+    const q = ['pageSize=100', ...fields.map((n) => 'fields%5B%5D=' + encodeURIComponent(n)), ...(view ? ['view=' + encodeURIComponent(view)] : []), ...(offset ? ['offset=' + encodeURIComponent(offset)] : [])].join('&');
+    const r = await airtableGet(`https://api.airtable.com/v0/${base}/${encodeURIComponent(table)}?${q}`, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return { records, status: r.status };
+    const j = await r.json();
+    records.push(...(j.records || []));
+    if (!j.offset) break;
+    offset = j.offset;
+  }
+  return { records, status: 0 };
 }
 // Only one refresh at a time (saving settings, syncing and opening the app can all ask for one)
 let refreshing = false;
@@ -1487,7 +1494,7 @@ function buildFields() {
 let newMode = false;
 function applyMode() {
   $('newBox').hidden = !newMode;
-  const ef = FIELDS.find((f) => f.existing), pk = $(fid(ef.key));
+  const pk = $(fid(job.idField().key));
   pk.disabled = newMode; pk.required = !newMode;
   pk.parentElement.hidden = true; // the damper's name is already in the title bar
   if (newMode) hideInfo(); else if (pk.value) showInfo(pk.value);
@@ -1504,8 +1511,7 @@ function resetForm() {
 function showScreen(detail) { const d = $('detail'); if (detail) { if (!d.open) d.showModal(); } else if (d.open) d.close(); }
 let curLabel = '';
 async function showMissing(label) {
-  const box = $('missBox'), ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key] || {};
-  const id = label && o.recs && o.recs[label];
+  const box = $('missBox'), id = job.recId(label);
   if (!id) { box.hidden = true; return; }
   const d = await loadDetail();
   const txt = (d && d.flags && d.flags[id]) || '';
@@ -1525,7 +1531,7 @@ function focusField(name) {
   }, 120);
 }
 async function openDamper(label, force, focusName) {
-  const ef = FIELDS.find((f) => f.existing), el = $(fid(ef.key)), o = getOpts()[ef.key] || {};
+  const el = $(fid(job.idField().key));
   homeScroll = window.scrollY;
   const same = !force && !newMode && el.value === label;
   newMode = false; curLabel = label;
@@ -1541,7 +1547,7 @@ async function openDamper(label, force, focusName) {
   restoring = true;
   await applyFill(label);
   baseline = formState(); refreshChips();
-  const key = (o.recs && o.recs[label]) || '';
+  const key = job.recId(label);
   const had = key && await restoreDraft(key);
   refreshChips();
   restoring = false;
@@ -1640,8 +1646,7 @@ function openQuick(n, name, dd, recs) {
   $('qTitle').textContent = n.replace(/^.*· /, '') + ' · ' + (pf || f.label || f.key);
   const o = f ? (getOpts()[f.key] || {}) : {};
   const cur = ((dd && dd.fill) || {})[rid] || {};
-  const rev = {};
-  for (const oo of Object.values(getOpts() || {})) if (oo && oo.type === 'multipleRecordLinks' && oo.recs) for (const [nm, id] of Object.entries(oo.recs)) rev[id] = nm;
+  const rev = job.linkNames();
   let el, qPhotos = [];
   const pickOnly = f && f.type === 'select' && (o.choices || []).length > 0;
   let startVal = '';
@@ -1704,38 +1709,20 @@ function openQuick(n, name, dd, recs) {
   } else { el = document.createElement('input'); el.type = f.type === 'date' ? 'date' : f.type === 'number' ? 'number' : 'text'; el.value = cur[f.key] || (f.type === 'date' ? today() : ''); body.append(el); }
   $('qCancel').onclick = () => { qPhotos.forEach((p) => URL.revokeObjectURL(p.url)); q.close(); };
   const doSave = async () => {
-    const fields = {}, photos = []; let fillVal = null, disp = '';
+    let changes = {}, photos = [];
     if (pf) {
-      qPhotos.forEach((p, i) => photos.push({ field: colOf(pf), name: `${pf.replace(/\W+/g, '_')}_${i + 1}.jpg`, blob: p.blob, done: false }));
+      photos = qPhotos.map((p) => ({ box: pf, blob: p.blob }));
       if (!photos.length) { q.close(); return; }
     } else if (f.multi) {
       let picks = []; try { picks = JSON.parse(el.dataset.sel || '[]'); } catch {}
       if (!picks.length && !el.dataset.changed) { q.close(); return; }
-      const who = (nm) => { const pp = (o.people && o.people[nm]) || {}; return pp.id ? { id: pp.id } : { email: pp.email || nm }; };
-      let val;
-      if (/Collaborator/.test(o.type || '')) { val = o.type === 'multipleCollaborators' ? picks.map(who) : who(picks[0]); fillVal = picks; }
-      else if (o.type === 'multipleRecordLinks') { val = picks.map((nm) => o.recs && o.recs[nm]).filter(Boolean); fillVal = val; }
-      else if (o.type === 'multipleSelects') { val = picks; fillVal = picks; }
-      else { val = picks[0]; fillVal = picks; }
-      if (!picks.length) { val = o.type === 'multipleCollaborators' || o.type === 'multipleRecordLinks' || o.type === 'multipleSelects' ? [] : null; fillVal = []; }
-      fields[colOf(f.key)] = val; disp = (Array.isArray(fillVal) ? fillVal : [fillVal]).join(', ');
+      changes = { [f.key]: picks };
     } else {
       const v = el.value.trim();
-      if (!v && (pickOnly || dateOnly)) { fields[colOf(f.key)] = o.type === 'multipleSelects' || o.type === 'multipleCollaborators' ? [] : null; fillVal = ''; disp = ''; } // Clear
-      else if (!v) { q.close(); return; }
-      else {
-      let val = f.type === 'number' ? Number(v) : v;
-      if (o.type === 'multipleSelects') val = [v];
-      else if (/Collaborator/.test(o.type || '')) { const pp = (o.people && o.people[v]) || {}; const w = pp.id ? { id: pp.id } : { email: pp.email || v }; val = o.type === 'multipleCollaborators' ? [w] : w; }
-      fields[colOf(f.key)] = val; fillVal = v; disp = v;
-      }
+      if (!v && !(pickOnly || dateOnly)) { q.close(); return; } // an empty text box is not sent; Clear in a list or calendar is
+      changes = { [f.key]: v };
     }
-    const item = { id: crypto.randomUUID(), createdAt: Date.now(), label: n, fields, photos, recordId: rid, preset: true, status: 'pending', error: '', base: cfg().base, tbl: tableRef(cfg()) };
-    try { await putItem(item); } catch { toast('Could not save: phone storage may be full. Sync or free up space.'); return; }
-    if (!pf) { // show the new value in the grid straight away
-      const d = await loadDetail();
-      if (d) { ((d.fill ||= {})[rid] ||= {})[f.key] = fillVal; const rc = ((d.recs ||= {})[rid] ||= {}); const k = (d.order || []).find((x) => norm(x) === norm(colOf(f.key))); if (k) rc[k] = disp; await saveDetail(d); }
-    }
+    try { await saveEdit(n, rid, changes, photos); } catch { toast('Could not save: phone storage may be full. Sync or free up space.'); return; }
     q.close(); toast('Saved ✓');
     await render(); sync();
   };
@@ -1785,8 +1772,7 @@ function holdToCopy(el, fn) {
 function copyCell(n, rid, name, dd) {
   const f = FIELDS.find((x) => norm(x.key) === norm(name) && !x.newOnly && !x.existing);
   if (!f) { toast('This column can\'t be copied'); return; }
-  const o = getOpts()[f.key] || {}, rev = {};
-  if (o.type === 'multipleRecordLinks' && o.recs) for (const [nm, id] of Object.entries(o.recs)) rev[id] = nm;
+  const rev = job.linkNames(f.key);
   let v = (((dd && dd.fill) || {})[rid] || {})[f.key];
   if (v == null || v === '' || (Array.isArray(v) && !v.length)) { toast('Nothing to copy in this cell'); return; }
   if (f.multi) v = (Array.isArray(v) ? v : [v]).map((x) => rev[x] || x);
@@ -1804,27 +1790,7 @@ function showPasteBar() {
   bar.hidden = false; $('btnNew').hidden = true;
 }
 async function pasteCell(n, rid, cellEl) {
-  const f = clip.f, o = getOpts()[f.key] || {};
-  const who = (nm) => { const pp = (o.people && o.people[nm]) || {}; return pp.id ? { id: pp.id } : { email: pp.email || nm }; };
-  let val, fillVal, disp;
-  if (f.multi) {
-    const picks = clip.v;
-    if (/Collaborator/.test(o.type || '')) { val = o.type === 'multipleCollaborators' ? picks.map(who) : who(picks[0]); fillVal = picks; }
-    else if (o.type === 'multipleRecordLinks') { val = picks.map((nm) => o.recs && o.recs[nm]).filter(Boolean); fillVal = val; }
-    else if (o.type === 'multipleSelects') { val = picks; fillVal = picks; }
-    else { val = picks[0]; fillVal = picks; }
-    disp = picks.join(', ');
-  } else {
-    const v = String(clip.v);
-    val = f.type === 'number' ? Number(v) : v;
-    if (o.type === 'multipleSelects') val = [v];
-    else if (/Collaborator/.test(o.type || '')) { const w = who(v); val = o.type === 'multipleCollaborators' ? [w] : w; }
-    fillVal = v; disp = v;
-  }
-  const item = { id: crypto.randomUUID(), createdAt: Date.now(), label: n, fields: { [colOf(f.key)]: val }, photos: [], recordId: rid, preset: true, status: 'pending', error: '', base: cfg().base, tbl: tableRef(cfg()) };
-  try { await putItem(item); } catch { toast('Could not save: phone storage may be full.'); return; }
-  const d = await loadDetail();
-  if (d) { ((d.fill ||= {})[rid] ||= {})[f.key] = fillVal; const rc = ((d.recs ||= {})[rid] ||= {}); const k = (d.order || []).find((x) => norm(x) === norm(colOf(f.key))); if (k) rc[k] = disp; await saveDetail(d); }
+  try { await saveEdit(n, rid, { [clip.f.key]: clip.v }); } catch { toast('Could not save: phone storage may be full.'); return; }
   cellEl.style.background = '#d1f7c4';
   toast('Pasted ✓ ' + n.replace(/^.*· /, ''));
   clearTimeout(pasteTimer); pasteTimer = setTimeout(async () => { await render(); sync(); }, 700); // redraw once after a run of pastes
@@ -1933,8 +1899,7 @@ function renderGrid(list, groups, ctx) {
   const colIx = {}; for (const k of (dd && dd.order) || []) colIx[norm(k)] = k;
   const picKey = {}; // photo column -> real column name
   for (const p of PHOTOS) picKey[p] = norm(getNames()[p] || p);
-  const rev = {}; // linked-record ids -> the names people see (Inspection Note - Select, Suggested Follow-up…)
-  for (const o of Object.values(getOpts() || {})) if (o && o.type === 'multipleRecordLinks' && o.recs) for (const [nm, id] of Object.entries(o.recs)) rev[id] = nm;
+  const rev = job.linkNames();
   const names2 = (v) => String(v).split(/,\s*/).map((t) => rev[t.trim()] || t).join(', ');
   const val = (rid, name) => {
     const rec = ((dd && dd.recs) || {})[rid] || {}, k = colIx[norm(name)];
@@ -2127,25 +2092,21 @@ function openPass(n, rid) {
   $('psCancel').onclick = close;
   $('psMore').onclick = () => { close(); openDamper(n); };
   $('psSave').onclick = async () => {
-    const opF = 'Operational Test', oo = opts[opF] || {};
-    const pass = (oo.choices || []).find((c) => /^pass$/i.test(c)) || 'Pass';
-    const fields = { [colOf(opF)]: oo.type === 'multipleSelects' ? [pass] : pass };
+    const opF = 'Operational Test';
+    const pass = ((opts[opF] || {}).choices || []).find((c) => /^pass$/i.test(c)) || 'Pass';
+    const changes = { [opF]: pass };
     const day = kv['Inspection Date'] || today();
-    if (!hid.includes(norm('Inspection Date'))) fields[colOf('Inspection Date')] = day;
+    if (!hid.includes(norm('Inspection Date'))) changes['Inspection Date'] = day;
     let people = ins;
     if (insSel && !insSel.dataset.many) people = insSel.value ? [insSel.value] : [];
     if (insSel && insSel.dataset.many && insSel.value && !ins.includes(insSel.value)) people = [insSel.value];
     if (insSel && people.length) {
-      const who = (nm) => { const pp = (io.people && io.people[nm]) || {}; return pp.id ? { id: pp.id } : { email: pp.email || nm }; };
-      fields[colOf(insF)] = io.type === 'multipleCollaborators' ? people.map(who) : /Collaborator/.test(io.type || '') ? who(people[0]) : io.type === 'multipleSelects' ? people : people[0];
+      changes[insF] = people;
       const k = keeps(); if (k.__day !== today()) { for (const f of FIELDS) if (f.keep && f.type === 'date') delete k[f.key]; }
       k[insF] = people; k['Inspection Date'] = k['Inspection Date'] || day; k.__day = today(); localStorage.setItem('keeps', JSON.stringify(k));
     }
-    const photos = Object.entries(shots).map(([p, s]) => ({ field: colOf(p), name: `${p.replace(/\W+/g, '_')}_1.jpg`, blob: s.blob, done: false }));
-    const item = { id: crypto.randomUUID(), createdAt: Date.now(), label: n, fields, photos, recordId: rid, preset: true, status: 'pending', error: '', base: cfg().base, tbl: tableRef(cfg()) };
-    try { await putItem(item); } catch { toast('Could not save: phone storage may be full. Sync or free up space.'); return; }
-    const d = await loadDetail();
-    if (d) { const fr = ((d.fill ||= {})[rid] ||= {}); fr[opF] = pass; fr['Inspection Date'] = day; if (people.length) fr[insF] = people; await saveDetail(d); }
+    const photos = Object.entries(shots).map(([p, s]) => ({ box: p, blob: s.blob }));
+    try { await saveEdit(n, rid, changes, photos); } catch { toast('Could not save: phone storage may be full. Sync or free up space.'); return; }
     close(); toast('Pass saved ✓');
     await render(); sync();
   };
@@ -2179,7 +2140,7 @@ $('hSort').onchange = () => {
 const countText = (n, all) => !all ? 'tap ↻ to load' : n === all ? all + ' dampers' : n + ' of ' + all;
 async function renderHome() {
   const seq = ++homeSeq;
-  const ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key] || {}, all = [...(o.choices || [])].sort(cmpDamper), recs = o.recs || {};
+  const all = [...job.dampers()].sort(cmpDamper), recs = job.recs();
   const items = await allItems();
   if (seq !== homeSeq) return;
   const waiting = new Set(items.filter((i) => i.status !== 'synced' && i.recordId).map((i) => i.recordId));
@@ -2187,12 +2148,7 @@ async function renderHome() {
   const dd = await loadDetail(), fl8 = (dd && dd.flags) || {};
   if (seq !== homeSeq) return;
   $('btnNew').textContent = drafts.NEW ? '+ New damper (draft)' : '+ New damper';
-  const parts = (n) => {
-    const i = n.indexOf(' · '), id = i < 0 ? n : n.slice(i + 3);
-    const m = id.match(/^[^\d]*?\d*[-\s_.]+(\d+)[-\s_.]/);
-    return { b: i < 0 ? '' : n.slice(0, i), fl: m ? String(parseInt(m[1], 10)) : '' };
-  };
-  const info = all.map(parts);
+  const info = all.map(job.place);
   const bSel = $('hBld'), fSel = $('hFlr');
   const mem = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
   const fill = (el, first, vals, fmt, key) => { const cur = el.value || mem(key); el.textContent = ''; [['', first], ...vals.map((v) => [v, fmt ? fmt(v) : v])].forEach(([v, t]) => el.append(new Option(t, v))); el.value = vals.includes(cur) ? cur : ''; };
@@ -2262,7 +2218,6 @@ async function renderHome() {
   if (onlyMiss) $('hMiss').append('✕ Missing only (' + nMiss + ')');
   else $('hMiss').append('● ' + nMiss + ' missing');
   const hits = all.filter((n, i) => (!onlyMiss || flagged(n)) && inScope(n, i));
-  mmData = { all, hits, opOf };
   const list = $('dlist'); list.textContent = '';
   const row = (n) => {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'pkitem';
@@ -2317,8 +2272,7 @@ async function renderHome() {
   $('hCount').textContent = countText(hits.length, all.length);
 }
 $('hMiss').onclick = () => { onlyMiss = !onlyMiss; renderHome(); };
-const setFmode = () => { $('fmode').textContent = floorMode ? '▦ Table' : '☰ Checklist'; $('btnMM').hidden = true; $('btnMU').hidden = floorMode; }; // Markup is for Manager view only. Map maker is off the screen (Avery 2026-11-18); its saved maps still show in 🗺 Map and Markup
-$('btnMM').onclick = () => mmStart();
+const setFmode = () => { $('fmode').textContent = floorMode ? '▦ Table' : '☰ Checklist'; $('btnMU').hidden = floorMode; }; // Markup is for Manager view only. Maps drawn with the old Map maker still show in 🗺 Map and Markup
 // Markup: opens the markup tool (markup/, inside this app) on the job's map that is already saved on this device
 $('btnMU').onclick = async () => {
   const c = cfg(), maps = mapsHere(), out = [];
@@ -2482,7 +2436,13 @@ async function locMarkup(file) {
   const list = document.createElement('div'); list.className = 'mklist'; list.hidden = true; // every page, top to bottom
   dlg.append(bar, nav, wrap, list); document.body.append(dlg); dlg.showModal();
   const g = cv.getContext('2d');
-  let W = 0, H = 0, px = null, base = null, u = 1, sq = 8, fs = 12, font = '', bw = 0, bh = 0;
+  let W = 0, H = 0, px = null, base = null, u = 1, ms = 1, bw = 0, bh = 0;
+  // The label is drawn by the Markup tool's own engine (markup/markup-engine.js), so it looks like the Markup labels
+  const mark = () => ({ id: text, note: '', fill, ink: 'black', style: 'line', x: pt.x, y: pt.y, bx: lab.x, by: lab.y, s: ms });
+  const sizeTo = (unit) => { // unit = 1/100 of what is on screen, so the label looks the same zoomed in or out
+    u = unit; ms = Math.max(12, u * 1.4) / 20; // the engine's ID text is 20 x size
+    const L = MarkupEngine.layout({ id: text, s: ms, style: 'line' }); bw = Math.round(L.w); bh = Math.round(L.h);
+  };
   let pt = null, lab = null, moved = false, drag = null, doc = null, page = 1, busy = false;
   let resetZoom = () => {};
   const close = () => { dlg.close(); dlg.remove(); if (doc) doc.destroy(); };
@@ -2493,10 +2453,7 @@ async function locMarkup(file) {
     const bx = base.getContext('2d'); bx.fillStyle = '#fff'; bx.fillRect(0, 0, W, H); bx.drawImage(src, 0, 0, W, H);
     px = bx.getImageData(0, 0, W, H).data;
     cv.width = W; cv.height = H;
-    u = Math.max(W, H) / 100; // one drawing unit, so the marks look the same on any size of picture
-    sq = Math.max(8, Math.round(u * 0.8)); fs = Math.max(12, Math.round(u * 1.4));
-    font = `600 ${fs}px -apple-system, system-ui, sans-serif`; g.font = font;
-    bw = Math.round(g.measureText(text).width + fs); bh = Math.round(fs * 1.7);
+    sizeTo(Math.max(W, H) / 100); // one drawing unit, so the marks look the same on any size of picture
     pt = null; lab = null; moved = false; ok.disabled = true; resetZoom(); draw();
   };
   const fromFile = async (f) => {
@@ -2582,12 +2539,7 @@ async function locMarkup(file) {
     if (!base) return;
     g.drawImage(base, 0, 0);
     if (!pt) return;
-    const ex = Math.max(lab.x, Math.min(pt.x, lab.x + bw)), ey = Math.max(lab.y, Math.min(pt.y, lab.y + bh));
-    g.strokeStyle = '#000'; g.lineWidth = Math.max(1.5, u * 0.22);
-    g.beginPath(); g.moveTo(pt.x, pt.y); g.lineTo(ex, ey); g.stroke();
-    g.fillStyle = fill; g.fillRect(lab.x, lab.y, bw, bh); g.strokeRect(lab.x, lab.y, bw, bh);
-    g.lineWidth = Math.max(2, u * 0.3); g.fillRect(pt.x - sq / 2, pt.y - sq / 2, sq, sq); g.strokeRect(pt.x - sq / 2, pt.y - sq / 2, sq, sq);
-    g.fillStyle = '#000'; g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, lab.x + bw / 2, lab.y + bh / 2 + 1);
+    g.save(); MarkupEngine.drawMark(g, mark(), false); g.restore();
   }
   const at = (e) => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height }; };
   // pinch to zoom, drag to move around, tap to place the square, drag the label to move it
@@ -2638,8 +2590,7 @@ async function locMarkup(file) {
       { // size the marks to what is on screen, so they look the same zoomed in or out
         const r = cv.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
         const vis = Math.max((Math.min(r.right, wr.right) - Math.max(r.left, wr.left)) * W / r.width, (Math.min(r.bottom, wr.bottom) - Math.max(r.top, wr.top)) * H / r.height);
-        u = Math.max(4, vis / 100); sq = Math.max(8, Math.round(u * 0.8)); fs = Math.max(12, Math.round(u * 1.4));
-        font = `600 ${fs}px -apple-system, system-ui, sans-serif`; g.font = font; bw = Math.round(g.measureText(text).width + fs); bh = Math.round(fs * 1.7);
+        sizeTo(Math.max(4, vis / 100));
         if (lab) lab = { x: Math.max(0, Math.min(W - bw, lab.x)), y: Math.max(0, Math.min(H - bh, lab.y)) };
       }
       if (!moved) place();
@@ -2672,312 +2623,15 @@ async function locMarkup(file) {
   };
   if (file) { nav.hidden = true; if (!await fromFile(file)) close(); } else await openMap(0);
 }
-/* ---------- Map maker (Manager view): draw a clean floor/room map like the plans, saved on this device ----------
-   Works offline. Each drawing is kept per job (localStorage 'mm') with its picture in the 'beta-mapmaker' cache,
+/* ---------- Maps drawn with the old Map maker (removed 2026-11-21 at Avery's request) ----------
+   The drawings people already made stay usable: each is kept per job (localStorage 'mm') with its picture in the 'beta-mapmaker' cache,
    and shows up in 🗺 Map and in Mark on map. */
 const MMC = 'beta-mapmaker', MMKEY = 'https://local.invalid/mm/';
-var mmData = { all: [], hits: [], opOf: () => "" }; // the damper list, filled in by renderHome (var: renderHome can run first)
 const mmAll = () => getJ('mm') || {};
 const mmJob = () => mmAll()[cfg().base] || [];
-function mmSetJob(list) { const a = mmAll(); if (list.length) a[cfg().base] = list; else delete a[cfg().base]; try { localStorage.setItem('mm', JSON.stringify(a)); } catch { toast('Not enough space on this device to save the map'); } }
 const localMaps = () => mmJob().filter((d) => d.png).map((d) => ({ id: 'mm-' + d.id, fn: d.name + '.png', type: 'image/png', size: d.size || 0, col: 'Map maker', rec: d.name, saved: true, local: d.id }));
-async function mmPut(key, blob) { const c = await caches.open(MMC); await c.put(MMKEY + key, new Response(blob, { headers: { 'Content-Type': blob.type || 'image/png' } })); }
 async function mmGet(key) { const c = await caches.open(MMC).catch(() => null); const r = c && await c.match(MMKEY + key); return r ? r.blob() : null; }
-async function mmDel(id) { const c = await caches.open(MMC).catch(() => null); if (c) { await c.delete(MMKEY + id + '.png'); await c.delete(MMKEY + id + '-bg'); } }
 
-function mmStart() { // pick: new blank map, new from a screenshot, or open a saved one
-  const dlg = document.createElement('dialog'); dlg.className = 'mmstart';
-  const h = document.createElement('h2'); h.textContent = 'Map maker · ' + jobName(cfg().base);
-  const p = document.createElement('p'); p.className = 'hint'; p.textContent = 'Draw a clean map of a floor or room, like the fan room one. Everything is saved on this phone, so it works without signal.';
-  const nb = document.createElement('button'); nb.type = 'button'; nb.textContent = '+ New blank map';
-  const ns = document.createElement('label'); ns.className = 'addbtn'; ns.textContent = '+ New, tracing over a screenshot';
-  const ni = document.createElement('input'); ni.type = 'file'; ni.accept = 'image/*'; ni.hidden = true; ns.append(ni);
-  const list = document.createElement('div');
-  const close = document.createElement('button'); close.type = 'button'; close.className = 'secondary'; close.textContent = 'Close';
-  const draw = () => {
-    list.textContent = '';
-    for (const d of mmJob()) {
-      const r = document.createElement('div'); r.className = 'mapRow';
-      const t = document.createElement('b'); t.textContent = d.name;
-      const s = document.createElement('p'); s.className = 'hint'; s.textContent = 'Saved ' + new Date(d.at).toLocaleString() + ' · ' + d.shapes.filter((x) => x.t === 'damp').length + ' dampers';
-      const row = document.createElement('div'); row.className = 'row';
-      const ed = document.createElement('button'); ed.type = 'button'; ed.textContent = 'Edit';
-      const sv = document.createElement('button'); sv.type = 'button'; sv.className = 'secondary'; sv.textContent = 'Save to Files';
-      const del = document.createElement('button'); del.type = 'button'; del.className = 'secondary'; del.textContent = 'Delete';
-      ed.onclick = async () => { dlg.close(); dlg.remove(); mmEditor(d, await mmGet(d.id + '-bg')); };
-      sv.onclick = async () => { const b = await mmGet(d.id + '.png'); if (b) mmShare(b, d.name); else toast('Save the map first'); };
-      del.onclick = async () => { if (!confirm('Delete the map "' + d.name + '" from this phone?')) return; mmSetJob(mmJob().filter((x) => x.id !== d.id)); await mmDel(d.id); setJobBar(); draw(); };
-      row.append(ed, sv, del); r.append(t, s, row); list.append(r);
-    }
-  };
-  nb.onclick = () => { dlg.close(); dlg.remove(); mmEditor(null, null); };
-  ni.onchange = async () => { const f = ni.files[0]; if (!f) return; dlg.close(); dlg.remove(); mmEditor(null, f); };
-  close.onclick = () => { dlg.close(); dlg.remove(); };
-  dlg.append(h, p, nb, ns, list, close); document.body.append(dlg); dlg.showModal(); draw();
-}
-async function mmShare(blob, name) {
-  const file = new File([blob], name.replace(/[\\/:*?"<>|]+/g, '-') + '.png', { type: 'image/png' });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: name }); } catch {} return; }
-  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60e3);
-}
-
-async function mmEditor(saved, bgFile) {
-  // ----- the picture: a screenshot to trace over (faded, left out of the saved map), or a blank sheet -----
-  let bg = null, W = 2400, H = 1700;
-  if (bgFile) {
-    try { const bmp = await createImageBitmap(bgFile, { imageOrientation: 'from-image' }); const k = Math.min(1, 2400 / Math.max(bmp.width, bmp.height)); W = Math.round(bmp.width * k); H = Math.round(bmp.height * k); bg = document.createElement('canvas'); bg.width = W; bg.height = H; bg.getContext('2d').drawImage(bmp, 0, 0, W, H); bmp.close && bmp.close(); }
-    catch { toast('Could not read that picture'); bg = null; }
-  }
-  if (saved) { W = saved.W; H = saved.H; }
-  const doc = { id: saved ? saved.id : String(Date.now()), name: saved ? saved.name : '', shapes: saved ? JSON.parse(JSON.stringify(saved.shapes)) : [] };
-  const U = Math.max(W, H) / 400, LW = Math.max(3, Math.round(U)), FS = Math.max(14, Math.round(Math.max(W, H) / 70)), GRID = Math.max(2, Math.round(U));
-  let showBg = !!bg, tool = 'outline', sel = null, draft = null, hist = [], dirty = false;
-  const snap = (v) => Math.round(v / GRID) * GRID;
-  const push = () => { hist.push(JSON.stringify(doc.shapes)); if (hist.length > 60) hist.shift(); dirty = true; };
-
-  // ----- screen -----
-  const dlg = document.createElement('dialog'); dlg.className = 'mkdlg mmdlg';
-  const bar = document.createElement('div'); bar.className = 'mkbar';
-  const bClose = document.createElement('button'); bClose.type = 'button'; bClose.className = 'secondary'; bClose.textContent = 'Close';
-  const title = document.createElement('span');
-  const bSave = document.createElement('button'); bSave.type = 'button'; bSave.textContent = 'Save';
-  bar.append(bClose, title, bSave);
-  const tb = document.createElement('div'); tb.className = 'mmtools';
-  const TOOLS = [['move', '✋ Move'], ['outline', '⬠ Outline'], ['room', '▭ Room'], ['stair', '▤ Stairs'], ['door', '◜ Door'], ['door2', '◜◝ Double door'], ['damp', '▣ Damper'], ['text', 'T Text']];
-  const tBtns = {};
-  for (const [k, t] of TOOLS) { const b = document.createElement('button'); b.type = 'button'; b.className = 'secondary'; b.textContent = t; b.onclick = () => { tool = k; draft = null; sel = null; paint(); }; tBtns[k] = b; tb.append(b); }
-  const acts = document.createElement('div'); acts.className = 'mmtools';
-  const bUndo = document.createElement('button'); bUndo.type = 'button'; bUndo.className = 'secondary'; bUndo.textContent = '↶ Undo';
-  const bFlip = document.createElement('button'); bFlip.type = 'button'; bFlip.className = 'secondary'; bFlip.textContent = '⇄ Flip door';
-  const bEdit = document.createElement('button'); bEdit.type = 'button'; bEdit.className = 'secondary'; bEdit.textContent = '✎ Rename';
-  const bDel = document.createElement('button'); bDel.type = 'button'; bDel.className = 'secondary'; bDel.textContent = '🗑 Delete';
-  const bBg = document.createElement('button'); bBg.type = 'button'; bBg.className = 'secondary'; bBg.textContent = '👁 Screenshot';
-  const hint = document.createElement('span'); hint.className = 'mmhint';
-  acts.append(bUndo, bFlip, bEdit, bDel, bBg, hint);
-  const wrap = document.createElement('div'); wrap.className = 'mkw';
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H; wrap.append(cv);
-  dlg.append(bar, tb, acts, wrap); document.body.append(dlg); dlg.showModal();
-  const g = cv.getContext('2d');
-  if (saved && !bg) { const b = await mmGet(saved.id + '-bg'); if (b) { try { const bmp = await createImageBitmap(b); bg = document.createElement('canvas'); bg.width = W; bg.height = H; bg.getContext('2d').drawImage(bmp, 0, 0, W, H); showBg = true; } catch {} } }
-  if (saved && bgFile && bg) showBg = true;
-
-  // ----- drawing each kind of thing, in the floor plan's style -----
-  const dampFill = (s) => MARK_COL[STAT(s.op)];
-  const dampBox = (s) => { g.font = `600 ${FS}px -apple-system, system-ui, sans-serif`; const w = Math.round(g.measureText(s.id).width + FS); return { x: s.lx, y: s.ly, w, h: Math.round(FS * 1.7) }; };
-  const doorGeo = (s) => { // hinge at a; leaf swings to one side of a→b
-    const [ax, ay] = s.a, [bx, by] = s.b, L = Math.hypot(bx - ax, by - ay) || 1, ux = (bx - ax) / L, uy = (by - ay) / L, nx = -uy * s.side, ny = ux * s.side;
-    return { ax, ay, bx, by, L, ux, uy, nx, ny };
-  };
-  function shape(c, s, out) {
-    c.lineJoin = 'round'; c.lineCap = 'butt'; c.setLineDash([]);
-    if (s.t === 'poly') {
-      if (s.pts.length < 2) return;
-      c.beginPath(); s.pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); if (s.closed) c.closePath();
-      c.strokeStyle = '#000'; c.lineWidth = LW; c.stroke();
-    } else if (s.t === 'room') {
-      c.strokeStyle = '#000'; c.lineWidth = LW; c.strokeRect(s.x, s.y, s.w, s.h);
-      if (s.label) {
-        c.fillStyle = '#000'; c.font = `700 ${FS}px -apple-system, system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
-        const words = s.label.split(/\s+/), lines = []; let ln = '';
-        for (const w of words) { const t = ln ? ln + ' ' + w : w; if (ln && c.measureText(t).width > s.w - FS) { lines.push(ln); ln = w; } else ln = t; }
-        if (ln) lines.push(ln);
-        lines.forEach((t, i) => c.fillText(t, s.x + s.w / 2, s.y + s.h / 2 + (i - (lines.length - 1) / 2) * FS * 1.25));
-      }
-    } else if (s.t === 'stair') {
-      const { x, y, w, h } = s, horiz = w >= h, L = horiz ? w : h;
-      c.fillStyle = '#58b948'; c.fillRect(x, y, w, h);
-      c.save(); c.beginPath(); c.rect(x, y, w, h); c.clip(); c.strokeStyle = '#3f6f3a';
-      const a0 = 0.2 * L, a1 = 0.8 * L, step = Math.max(6, U * 2.5);
-      c.lineWidth = Math.max(1, LW / 3);
-      for (let t = a0; t <= a1 + 0.1; t += step) { c.beginPath(); if (horiz) { c.moveTo(x + t, y); c.lineTo(x + t, y + h); } else { c.moveTo(x, y + t); c.lineTo(x + w, y + t); } c.stroke(); }
-      c.lineWidth = Math.max(1.5, LW / 2); c.beginPath(); if (horiz) { c.moveTo(x + a0, y + h / 2); c.lineTo(x + a1, y + h / 2); } else { c.moveTo(x + w / 2, y + a0); c.lineTo(x + w / 2, y + a1); } c.stroke();
-      c.restore();
-      c.strokeStyle = '#e10000'; c.lineWidth = LW * 1.2; c.setLineDash([LW * 3, LW * 0.6, LW * 0.6, LW * 0.6]); c.strokeRect(x, y, w, h); c.setLineDash([]);
-    } else if (s.t === 'door') {
-      const d = doorGeo(s);
-      c.strokeStyle = out ? '#fff' : (showBg ? 'rgba(255,255,255,.9)' : '#fff'); c.lineWidth = LW * 1.6; c.beginPath(); c.moveTo(d.ax, d.ay); c.lineTo(d.bx, d.by); c.stroke();
-      c.strokeStyle = '#000'; c.lineWidth = Math.max(2, LW / 2);
-      const leaf = (hx, hy, dx, dy, r) => { // a leaf from the hinge, and its dashed swing arc back to the jamb
-        const ex = hx + d.nx * r, ey = hy + d.ny * r;
-        c.setLineDash([]); c.beginPath(); c.moveTo(hx, hy); c.lineTo(ex, ey); c.stroke();
-        const a0 = Math.atan2(dy, dx), a1 = Math.atan2(d.ny, d.nx); let da = a1 - a0; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
-        c.setLineDash([LW, LW * 0.8]); c.beginPath(); c.arc(hx, hy, r, a0, a1, da < 0); c.stroke(); c.setLineDash([]);
-      };
-      if (s.dbl) { leaf(d.ax, d.ay, d.ux, d.uy, d.L / 2); leaf(d.bx, d.by, -d.ux, -d.uy, d.L / 2); } else leaf(d.ax, d.ay, d.ux, d.uy, d.L);
-    } else if (s.t === 'text') {
-      c.fillStyle = '#000'; c.font = `600 ${FS}px -apple-system, system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(s.s, s.x, s.y);
-    } else if (s.t === 'damp') {
-      const b = dampBox(s), q = Math.max(8, Math.round(FS * 0.6));
-      const ex = Math.max(b.x, Math.min(s.x, b.x + b.w)), ey = Math.max(b.y, Math.min(s.y, b.y + b.h));
-      c.strokeStyle = '#000'; c.lineWidth = Math.max(1.5, LW / 2.5); c.beginPath(); c.moveTo(s.x, s.y); c.lineTo(ex, ey); c.stroke();
-      c.fillStyle = dampFill(s); c.fillRect(b.x, b.y, b.w, b.h); c.strokeRect(b.x, b.y, b.w, b.h);
-      c.lineWidth = Math.max(2, LW / 2); c.fillRect(s.x - q / 2, s.y - q / 2, q, q); c.strokeRect(s.x - q / 2, s.y - q / 2, q, q);
-      c.fillStyle = '#000'; c.font = `600 ${FS}px -apple-system, system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(s.id, b.x + b.w / 2, b.y + b.h / 2 + 1);
-    }
-  }
-  const ORDER = { poly: 0, room: 1, stair: 2, door: 3, text: 4, damp: 5 };
-  function render(c, out) {
-    c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#fff'; c.fillRect(0, 0, W, H);
-    if (bg && showBg && !out) { c.globalAlpha = 0.35; c.drawImage(bg, 0, 0); c.globalAlpha = 1; }
-    [...doc.shapes].sort((a, b) => ORDER[a.t] - ORDER[b.t]).forEach((s) => shape(c, s, out));
-  }
-  function bbox(s) {
-    if (s.t === 'poly') { const xs = s.pts.map((p) => p[0]), ys = s.pts.map((p) => p[1]); return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }; }
-    if (s.t === 'room' || s.t === 'stair') return { x: s.x, y: s.y, w: s.w, h: s.h };
-    if (s.t === 'door') { const x = Math.min(s.a[0], s.b[0]), y = Math.min(s.a[1], s.b[1]); return { x, y, w: Math.abs(s.a[0] - s.b[0]), h: Math.abs(s.a[1] - s.b[1]) }; }
-    if (s.t === 'text') { g.font = `600 ${FS}px sans-serif`; const w = g.measureText(s.s).width; return { x: s.x - w / 2, y: s.y - FS / 2, w, h: FS }; }
-    const b = dampBox(s); return { x: Math.min(b.x, s.x), y: Math.min(b.y, s.y), w: Math.max(b.x + b.w, s.x) - Math.min(b.x, s.x), h: Math.max(b.y + b.h, s.y) - Math.min(b.y, s.y) };
-  }
-  function paint() {
-    render(g, false);
-    if (draft && draft.t === 'poly') { // the outline being drawn: line so far, and a dot on the first corner to close it
-      shape(g, draft, false); const [x, y] = draft.pts[0]; g.fillStyle = '#1f6feb'; g.beginPath(); g.arc(x, y, LW * 2, 0, 7); g.fill();
-    } else if (draft) shape(g, draft, false);
-    if (sel) { const b = bbox(sel), m = LW * 2; g.strokeStyle = '#1f6feb'; g.lineWidth = Math.max(2, LW / 2); g.setLineDash([LW * 2, LW]); g.strokeRect(b.x - m, b.y - m, b.w + 2 * m, b.h + 2 * m); g.setLineDash([]); }
-    for (const [k, b] of Object.entries(tBtns)) b.classList.toggle('on', k === tool);
-    bFlip.hidden = !(sel && sel.t === 'door'); bEdit.hidden = !(sel && ['room', 'text', 'damp'].includes(sel.t)); bDel.hidden = !sel; bBg.hidden = !bg; bUndo.disabled = !hist.length;
-    bBg.textContent = showBg ? '👁 Hide screenshot' : '👁 Show screenshot';
-    hint.textContent = { move: 'Drag things to move them. Tap one to pick it.', outline: draft ? 'Tap each corner. Tap the blue dot to finish.' : 'Tap each corner of the building or room outline.', room: 'Drag from one corner to the other.', stair: 'Drag from one corner to the other.', door: 'Drag across the doorway, starting at the hinge side.', door2: 'Drag across the doorway.', damp: 'Tap where the damper is.', text: 'Tap where the words go.' }[tool];
-    title.textContent = doc.name || 'New map';
-  }
-  // ----- pinch to zoom; one finger draws (or drags in Move) -----
-  let z = 1, tx = 0, ty = 0, pinch = null, act = null;
-  const ptrs = new Map();
-  const applyZ = () => { cv.style.transform = `translate(${tx}px,${ty}px) scale(${z})`; };
-  const origin = () => { const r = wrap.getBoundingClientRect(); return { x: r.left + cv.offsetLeft, y: r.top + cv.offsetTop }; };
-  const at = (e) => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height }; };
-  const near = (e) => { const r = cv.getBoundingClientRect(); return 22 * W / r.width; }; // a finger's width, in map units
-  const ang45 = (x0, y0, x, y) => { // keep lines straight: snap to 0/45/90°
-    const a = Math.round(Math.atan2(y - y0, x - x0) / (Math.PI / 4)) * (Math.PI / 4), L = Math.hypot(x - x0, y - y0);
-    return [snap(x0 + Math.cos(a) * L), snap(y0 + Math.sin(a) * L)];
-  };
-  const hit = (p, tol) => { // the topmost thing under the finger
-    const segD = (px, py, [x1, y1], [x2, y2]) => { const dx = x2 - x1, dy = y2 - y1, t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / ((dx * dx + dy * dy) || 1))); return Math.hypot(px - x1 - t * dx, py - y1 - t * dy); };
-    const list = [...doc.shapes].sort((a, b) => ORDER[b.t] - ORDER[a.t]);
-    for (const s of list) {
-      if (s.t === 'damp') { const b = dampBox(s); if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) return { s, part: 'label' }; if (Math.hypot(p.x - s.x, p.y - s.y) < tol) return { s, part: 'pt' }; }
-      else if (s.t === 'text') { const b = bbox(s); if (p.x >= b.x - tol / 2 && p.x <= b.x + b.w + tol / 2 && p.y >= b.y - tol / 2 && p.y <= b.y + b.h + tol / 2) return { s }; }
-      else if (s.t === 'door') { if (segD(p.x, p.y, s.a, s.b) < tol) return { s }; }
-      else if (s.t === 'room' || s.t === 'stair') { if (p.x >= s.x - tol / 2 && p.x <= s.x + s.w + tol / 2 && p.y >= s.y - tol / 2 && p.y <= s.y + s.h + tol / 2) return { s }; }
-      else if (s.t === 'poly') { const i = s.pts.findIndex(([x, y]) => Math.hypot(p.x - x, p.y - y) < tol); if (i >= 0) return { s, part: 'v', i }; for (let k = 0; k < s.pts.length - (s.closed ? 0 : 1); k++) if (segD(p.x, p.y, s.pts[k], s.pts[(k + 1) % s.pts.length]) < tol / 2) return { s }; }
-    }
-    return null;
-  };
-  const ask = (q, v) => { const r = prompt(q, v || ''); return r == null ? null : r.trim(); };
-  async function pickDamper() { // a small list of this job's dampers (the ones the filters show first), or type one
-    return new Promise((res) => {
-      const d = document.createElement('dialog'); d.className = 'mmpick';
-      const h = document.createElement('h2'); h.textContent = 'Which damper?';
-      const s = document.createElement('input'); s.type = 'search'; s.placeholder = 'Search or type a damper ID…'; s.autocapitalize = 'characters';
-      const l = document.createElement('div'); l.className = 'mmplist';
-      const used = new Set(doc.shapes.filter((x) => x.t === 'damp').map((x) => x.label));
-      const src = mmData.hits.length ? mmData.hits : mmData.all;
-      const done = (v) => { d.close(); d.remove(); res(v); };
-      const fill = () => {
-        l.textContent = ''; const q = s.value.trim().toLowerCase();
-        const rows = src.filter((n) => !q || n.toLowerCase().includes(q)).slice(0, 80);
-        for (const n of rows) { const b = document.createElement('button'); b.type = 'button'; b.className = 'pkitem'; b.textContent = n + (used.has(n) ? '  ✓ on map' : ''); const op = mmData.opOf(n); if (op) { const c = chipEl(op); c.style.marginLeft = 'auto'; b.append(c); } b.onclick = () => done({ label: n, id: n.replace(/^.*· /, ''), op: mmData.opOf(n) || '' }); l.append(b); }
-        if (q && !rows.some((n) => n.toLowerCase().endsWith(q))) { const b = document.createElement('button'); b.type = 'button'; b.className = 'pkitem'; b.textContent = 'Use "' + s.value.trim() + '"'; b.onclick = () => done({ label: s.value.trim(), id: s.value.trim(), op: '' }); l.prepend(b); }
-      };
-      const x = document.createElement('button'); x.type = 'button'; x.className = 'secondary'; x.textContent = 'Cancel'; x.onclick = () => done(null);
-      s.oninput = fill; d.append(h, s, l, x); document.body.append(d); d.showModal(); fill();
-    });
-  }
-  cv.onpointerdown = async (e) => {
-    cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (ptrs.size === 2) { const [a1, a2] = [...ptrs.values()], o = origin(), mx = (a1.x + a2.x) / 2, my = (a1.y + a2.y) / 2; pinch = { d: Math.hypot(a1.x - a2.x, a1.y - a2.y) || 1, z, cx: (mx - o.x - tx) / z, cy: (my - o.y - ty) / z }; if (act && act.kind === 'rect') draft = null; act = null; paint(); return; }
-    const p = at(e), tol = near(e);
-    act = { kind: 'tap', sx: e.clientX, sy: e.clientY, p, tx, ty, moved: false };
-    if (tool === 'move') { const h = hit(p, tol); if (h) { sel = h.s; act = { kind: 'drag', h, p0: p, snap0: JSON.stringify(h.s), moved: false }; } paint(); }
-    else if (tool === 'room' || tool === 'stair' || tool === 'door' || tool === 'door2') act = { kind: 'rect', p0: { x: snap(p.x), y: snap(p.y) }, moved: false };
-  };
-  cv.onpointermove = (e) => {
-    if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pinch && ptrs.size >= 2) { const [a1, a2] = [...ptrs.values()], o = origin(), mx = (a1.x + a2.x) / 2, my = (a1.y + a2.y) / 2; z = Math.max(1, Math.min(10, pinch.z * Math.hypot(a1.x - a2.x, a1.y - a2.y) / pinch.d)); tx = mx - o.x - pinch.cx * z; ty = my - o.y - pinch.cy * z; if (z === 1) tx = ty = 0; applyZ(); return; }
-    if (!act) return; const p = at(e);
-    if (act.kind === 'tap') { const dx = e.clientX - act.sx, dy = e.clientY - act.sy; if (Math.hypot(dx, dy) > 8) act.moved = true; if (act.moved && z > 1) { tx = act.tx + dx; ty = act.ty + dy; applyZ(); } return; }
-    if (act.kind === 'rect') {
-      act.moved = true; const a = act.p0;
-      if (tool === 'door' || tool === 'door2') { const [bx, by] = ang45(a.x, a.y, p.x, p.y); draft = { t: 'door', a: [a.x, a.y], b: [bx, by], side: 1, dbl: tool === 'door2' }; }
-      else { const x2 = snap(p.x), y2 = snap(p.y); draft = { t: tool, x: Math.min(a.x, x2), y: Math.min(a.y, y2), w: Math.abs(x2 - a.x), h: Math.abs(y2 - a.y), label: '' }; }
-      paint(); return;
-    }
-    if (act.kind === 'drag') {
-      const s = act.h.s, o = JSON.parse(act.snap0), dx = snap(p.x - act.p0.x), dy = snap(p.y - act.p0.y);
-      if (!act.moved && Math.hypot(p.x - act.p0.x, p.y - act.p0.y) < near(e) / 3) return;
-      if (!act.moved) { hist.push(JSON.stringify(doc.shapes)); act.moved = true; dirty = true; }
-      if (s.t === 'poly') { if (act.h.part === 'v') { s.pts[act.h.i] = [o.pts[act.h.i][0] + dx, o.pts[act.h.i][1] + dy]; } else s.pts = o.pts.map(([x, y]) => [x + dx, y + dy]); }
-      else if (s.t === 'door') { s.a = [o.a[0] + dx, o.a[1] + dy]; s.b = [o.b[0] + dx, o.b[1] + dy]; }
-      else if (s.t === 'damp') { if (act.h.part === 'label') { s.lx = o.lx + dx; s.ly = o.ly + dy; } else { s.x = o.x + dx; s.y = o.y + dy; s.lx = o.lx + dx; s.ly = o.ly + dy; } }
-      else { s.x = o.x + dx; s.y = o.y + dy; }
-      paint();
-    }
-  };
-  const up = async (e) => {
-    ptrs.delete(e.pointerId);
-    if (pinch) { if (!ptrs.size) pinch = null; return; }
-    const a = act; act = null; if (!a) return;
-    if (a.kind === 'rect') {
-      if (draft && (draft.t === 'door' ? Math.hypot(draft.b[0] - draft.a[0], draft.b[1] - draft.a[1]) > GRID * 3 : draft.w > GRID * 3 && draft.h > GRID * 3)) {
-        push(); const s = draft; draft = null;
-        if (s.t === 'room') { const l = ask('Room name (optional), like FAN ROOM'); s.label = (l || '').toUpperCase(); }
-        doc.shapes.push(s); sel = s;
-      } else draft = null;
-      paint(); return;
-    }
-    if (a.kind === 'drag') { paint(); return; }
-    if (a.kind !== 'tap' || a.moved || e.type !== 'pointerup') return;
-    const p = a.p, tol = near(e);
-    if (tool === 'move') { const h = hit(p, tol); sel = h ? h.s : null; paint(); return; }
-    if (tool === 'outline') {
-      if (!draft) { draft = { t: 'poly', pts: [[snap(p.x), snap(p.y)]], closed: false }; paint(); return; }
-      const [x0, y0] = draft.pts[0];
-      if (draft.pts.length > 2 && Math.hypot(p.x - x0, p.y - y0) < tol) { push(); draft.closed = true; doc.shapes.push(draft); sel = draft; draft = null; tool = 'move'; paint(); return; }
-      const [lx, ly] = draft.pts[draft.pts.length - 1]; draft.pts.push(ang45(lx, ly, p.x, p.y)); paint(); return;
-    }
-    if (tool === 'text') { const t = ask('Words to show'); if (t) { push(); const s = { t: 'text', x: snap(p.x), y: snap(p.y), s: t }; doc.shapes.push(s); sel = s; } paint(); return; }
-    if (tool === 'damp') {
-      const d = await pickDamper(); if (!d) return;
-      push(); const s = { t: 'damp', x: Math.round(p.x), y: Math.round(p.y), lx: 0, ly: 0, ...d };
-      const b = dampBox({ ...s, lx: 0, ly: 0 }), gap = FS * 3;
-      s.lx = Math.round(Math.max(2, Math.min(W - b.w - 2, p.x + gap))); s.ly = Math.round(Math.max(2, Math.min(H - b.h - 2, p.y - gap - b.h)));
-      doc.shapes.push(s); sel = s; paint();
-    }
-  };
-  cv.onpointerup = up; cv.onpointercancel = up;
-  bUndo.onclick = () => { if (!hist.length) return; doc.shapes = JSON.parse(hist.pop()); sel = null; draft = null; dirty = true; paint(); };
-  bFlip.onclick = () => { if (sel && sel.t === 'door') { push(); sel.side = -sel.side; paint(); } };
-  bEdit.onclick = () => {
-    if (!sel) return;
-    if (sel.t === 'room') { const l = ask('Room name', sel.label); if (l != null) { push(); sel.label = l.toUpperCase(); } }
-    else if (sel.t === 'text') { const l = ask('Words to show', sel.s); if (l) { push(); sel.s = l; } }
-    else if (sel.t === 'damp') { const l = ask('Damper ID on the label', sel.id); if (l) { push(); sel.id = l; } }
-    paint();
-  };
-  bDel.onclick = () => { if (!sel) return; push(); doc.shapes = doc.shapes.filter((s) => s !== sel); sel = null; paint(); };
-  bBg.onclick = () => { showBg = !showBg; paint(); };
-  const save = async () => {
-    if (!doc.name) { const n = ask('Name this map (like 7th floor fan room)'); if (!n) return false; doc.name = n; }
-    // refresh each damper's color from its current test result
-    for (const s of doc.shapes) if (s.t === 'damp' && s.label && mmData.all.includes(s.label)) s.op = mmData.opOf(s.label) || s.op || '';
-    const out = document.createElement('canvas'); out.width = W; out.height = H; render(out.getContext('2d'), true);
-    const png = await new Promise((r) => out.toBlob(r, 'image/png'));
-    try {
-      await mmPut(doc.id + '.png', png);
-      if (bg) await mmPut(doc.id + '-bg', await new Promise((r) => bg.toBlob(r, 'image/jpeg', 0.8)));
-    } catch { toast('Not enough space on this phone to save the map'); return false; }
-    const list = mmJob().filter((x) => x.id !== doc.id);
-    list.unshift({ id: doc.id, name: doc.name, W, H, shapes: doc.shapes, at: Date.now(), png: true, size: png.size });
-    mmSetJob(list); dirty = false; setJobBar(); paint();
-    toast('Map saved on this phone. It shows in 🗺 Map and Mark on map.');
-    return true;
-  };
-  bSave.onclick = save;
-  const close = () => { dlg.close(); dlg.remove(); };
-  bClose.onclick = async () => { if (dirty && confirm('Save your changes first?')) { if (!await save()) return; } close(); };
-  dlg.addEventListener('cancel', (e) => { e.preventDefault(); bClose.onclick(); });
-  paint();
-}
 function applyKeeps() {
   const k = keepVals();
   for (const f of FIELDS) {
@@ -3024,55 +2678,90 @@ async function shrink(file) {
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('encode'))), 'image/jpeg', JPEG_Q));
 }
 
+/* ---------- Sending a change to Airtable: every screen goes through saveEdit ----------
+   saveEdit(label, recordId, changes, photos)
+     label    : the damper as the list shows it ("Bldg A · FD-1-011"), for the Messages list
+     recordId : the damper's Airtable row, or null for a new damper
+     changes  : { field: value } with values as the screens hold them: text, or a list of names for
+                pick-several fields (people, notes). '' or [] means "empty it in Airtable".
+     photos   : [{ box: 'Open Damper', blob }]
+   It turns the values into Airtable's format, puts the entry in the waiting-to-sync list (fails if the phone
+   is full), and updates the phone's copy so the table and checklist show the change straight away. */
+const MANY = /^multiple(Selects|Collaborators|RecordLinks)$/;
+function airtableValue(key, value) {
+  const f = FIELDS.find((x) => x.key === key) || {}, o = getOpts()[key] || {};
+  const list = [].concat(value == null ? [] : value).map((x) => String(x).trim()).filter(Boolean);
+  if (!list.length) return MANY.test(o.type || '') ? [] : null; // how Airtable is told "empty"
+  const who = (nm) => { const pp = (o.people && o.people[nm]) || {}; return pp.id ? { id: pp.id } : { email: pp.email || nm }; };
+  if (/Collaborator/.test(o.type || '')) return o.type === 'multipleCollaborators' ? list.map(who) : who(list[0]);
+  if (o.type === 'multipleRecordLinks') return list.map((nm) => o.recs && o.recs[nm]).filter(Boolean);
+  if (o.type === 'multipleSelects') return list;
+  return f.type === 'number' ? Number(list[0]) : list[0];
+}
+function phoneValue(key, value) { // what the phone's copy keeps: the same shape Airtable sends back (record IDs for linked notes)
+  const f = FIELDS.find((x) => x.key === key) || {}, o = getOpts()[key] || {};
+  const list = [].concat(value == null ? [] : value).map((x) => String(x).trim()).filter(Boolean);
+  if (!f.multi) return list[0] || '';
+  return o.type === 'multipleRecordLinks' ? list.map((nm) => o.recs && o.recs[nm]).filter(Boolean) : list;
+}
+async function saveEdit(label, recordId, changes, photos = []) {
+  const c = cfg(), fields = {}, n = {};
+  for (const [k, v] of Object.entries(changes)) fields[colOf(k)] = airtableValue(k, v);
+  const item = {
+    id: crypto.randomUUID(), createdAt: Date.now(), label, fields,
+    photos: photos.map((p) => ({ field: colOf(p.box), name: `${p.box.replace(/\W+/g, '_')}_${(n[p.box] = (n[p.box] || 0) + 1)}.jpg`, blob: p.blob, done: false })),
+    recordId: recordId || null, preset: !!recordId, status: 'pending', error: '', base: c.base, tbl: tableRef(c),
+  };
+  await putItem(item);
+  const d = recordId && Object.keys(changes).length && await loadDetail();
+  if (d) {
+    const fr = ((d.fill ||= {})[recordId] ||= {}), rc = ((d.recs ||= {})[recordId] ||= {});
+    for (const [k, v] of Object.entries(changes)) {
+      fr[k] = phoneValue(k, v);
+      const col = (d.order || []).find((x) => norm(x) === norm(colOf(k)));
+      if (col) rc[col] = [].concat(v == null ? [] : v).join(', ');
+    }
+    await saveDetail(d);
+  }
+  return item;
+}
+
 // Changes on a damper page are sent when you close the page or go to the next damper (no Save button).
 // quiet: no messages unless something stops it; the unfinished work stays as a draft.
 const isDirty = () => !!draftKey && (formState() !== baseline || PHOTOS.some((n) => (pendingPhotos[n] || []).length));
 async function commitForm(quiet) {
   const say = (m) => { if (!quiet) toast(m); };
-  const fields = {}, vals = {}, k = {};
+  const changes = {}, vals = {}, k = {};
   let pickedId = '';
+  const air = !newMode && airVals; // existing damper: only what differs from Airtable is sent
   for (const f of FIELDS) {
     if ((f.newOnly && !newMode) || (f.existing && newMode)) continue;
+    const el = $(fid(f.key));
+    let v;
     if (f.multi) {
-      let picks = []; try { picks = JSON.parse($(fid(f.key)).dataset.sel || '[]'); } catch {}
-      if (!picks.length && $(fid(f.key)).value.trim()) picks = $(fid(f.key)).value.split(/,\s*/).filter(Boolean); // shown but never tapped: send what is shown
-      const o = getOpts()[f.key] || {};
-      if (f.keep) { k[f.key] = $(fid(f.key)).value; k[f.key + '#sel'] = $(fid(f.key)).dataset.sel || ''; }
-      if (picks.length) {
-        const who = (n) => { const pp = (o.people && o.people[n]) || {}; return pp.id ? { id: pp.id } : { email: pp.email || n }; };
-        if (/Collaborator/.test(o.type || '')) fields[colOf(f.key)] = o.type === 'multipleCollaborators' ? picks.map(who) : who(picks[0]);
-        else if (o.type === 'multipleRecordLinks') fields[colOf(f.key)] = picks.map((n) => o.recs && o.recs[n]).filter(Boolean);
-        else if (o.type === 'multipleSelects') fields[colOf(f.key)] = picks;
-        else fields[colOf(f.key)] = picks[0];
-      }
-      continue;
+      let picks = []; try { picks = JSON.parse(el.dataset.sel || '[]'); } catch {}
+      if (!picks.length && el.value.trim()) picks = el.value.split(/,\s*/).filter(Boolean); // shown but never tapped: send what is shown
+      if (f.keep) { k[f.key] = el.value; k[f.key + '#sel'] = el.dataset.sel || ''; }
+      v = picks;
+    } else {
+      v = el.value.trim();
+      if (f.keep) k[f.key] = v;
+      vals[f.key] = v;
+      if (f.existing) { pickedId = v; continue; } // the full damper ID is built by Airtable: only ever read, never written
     }
-    const v = $(fid(f.key)).value.trim();
-    if (f.keep) k[f.key] = v;
-    vals[f.key] = v;
-    if (f.existing) { pickedId = v; continue; } // the full damper ID is built by Airtable: only ever read, never written
-    if (v === '') continue;
-    let val = f.type === 'number' ? Number(v) : v;
-    const o = f.type === 'select' && getOpts()[f.key];
-    if (o && o.type === 'multipleSelects') val = [v];
-    else if (o && /Collaborator/.test(o.type)) {
-      const pp = (o.people && o.people[v]) || {};
-      const who = pp.id ? { id: pp.id } : { email: pp.email || v };
-      val = o.type === 'multipleCollaborators' ? [who] : who;
-    }
-    fields[colOf(f.key)] = val;
+    const empty = !v.length;
+    if (air && f.key in air) { if (!sameVal(v, air[f.key])) changes[f.key] = v; } // changed, or emptied on the phone
+    else if (!empty) changes[f.key] = v;
   }
   let presetId = null, label = '';
-  const ef = FIELDS.find((f) => f.existing);
   if (newMode) {
     const num = vals['Damper ID #'] || '';
     if (!num) { toast(quiet ? 'New damper kept as a draft. Enter the damper number to send it.' : 'Enter the damper number'); return false; }
     if (/[-\s]/.test(num)) { toast((quiet ? 'New damper kept as a draft. ' : '') + 'Enter just the number (for example 011), not the whole ID. Pick the type and floor above.'); return false; }
     label = [vals['Damper type'], vals['Floor'], num].filter(Boolean).join('-');
   } else {
-    const o = getOpts()[ef.key];
-    if (!o || !o.recs || !Object.keys(o.recs).length) { toast('Damper list not loaded yet, so this was kept as a draft. Tap Refresh lists at the top.'); return false; }
-    presetId = o.recs[pickedId];
+    if (!job.loaded()) { toast('Damper list not loaded yet, so this was kept as a draft. Tap Refresh lists at the top.'); return false; }
+    presetId = job.recId(pickedId);
     if (!presetId) { toast('Pick a Damper ID from the list'); return false; }
     label = pickedId;
   }
@@ -3083,18 +2772,10 @@ async function commitForm(quiet) {
     localStorage.setItem('keeps', JSON.stringify(next));
   }
   const photos = [], skip = noPics();
-  for (const name of PHOTOS) {
-    if (skip.includes(name)) continue; // this table has no column for it
-    (pendingPhotos[name] || []).forEach((p, i) =>
-      photos.push({ field: colOf(name), name: `${name.replace(/\W+/g, '_')}_${i + 1}.jpg`, blob: p.blob, done: false }));
-  }
-  if (!photos.length && !Object.keys(fields).length) { say('Add a photo or some notes first'); return false; }
-  const item = {
-    id: crypto.randomUUID(), createdAt: Date.now(), label, fields, photos,
-    recordId: presetId, preset: !!presetId, status: 'pending', error: '', base: cfg().base, tbl: tableRef(cfg()),
-  };
+  for (const name of PHOTOS) if (!skip.includes(name)) for (const p of pendingPhotos[name] || []) photos.push({ box: name, blob: p.blob }); // boxes this table has a column for
+  if (!photos.length && !Object.keys(changes).length) { say('Add a photo or some notes first'); return false; }
   const dk = draftKey;
-  try { await putItem(item); }
+  try { await saveEdit(label, presetId, changes, photos); }
   catch { toast('Could not save: phone storage may be full. It is kept as a draft. Sync or free up space.'); await saveDraft(); return false; }
   clearTimeout(draftTimer);
   if (dk) await deleteDraft(dk);
@@ -3154,11 +2835,11 @@ async function sync(manual) {
         // 1) create the record once; remember its id so a retry never duplicates it
         if (!it.recordId) {
           const res = await api(`https://api.airtable.com/v0/${it.base || c.base}/${encodeURIComponent(it.tbl || tableRef(c))}`,
-            { fields: (({ [FIELDS.find((f) => f.existing).key]: _, ...rest }) => rest)(it.fields), typecast: true });
+            { fields: (({ [job.idField().key]: _, ...rest }) => rest)(it.fields), typecast: true });
           it.recordId = res.id; createdAny = true; it.dropped = dropped(it.fields, res); await putItem(it);
         } else if (it.preset && !it.patched) {
           // existing damper: fill in its row instead of creating a new one
-          const body = { ...it.fields }; delete body[FIELDS.find((f) => f.existing).key];
+          const body = { ...it.fields }; delete body[job.idField().key];
           if (Object.keys(body).length) {
             const res = await api(`https://api.airtable.com/v0/${it.base || c.base}/${encodeURIComponent(it.tbl || tableRef(c))}/${it.recordId}`,
               { fields: body, typecast: true }, 'PATCH');
@@ -3472,7 +3153,7 @@ document.addEventListener('close', () => setTimeout(() => autoRefresh(AUTO_REFRE
 /* ---------- Jobs: every damper base the token can open, and which ones are kept on this phone ---------- */
 async function setOpPill(label) {
   const el = $('dOp'); el.textContent = '';
-  const ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key] || {}, rid = (o.recs || {})[label], d = await loadDetail();
+  const rid = job.recId(label), d = await loadDetail();
   const v = ((d && d.fill && d.fill[rid]) || {})['Operational Test'];
   if (v && curLabel === label) el.append(chipEl(v));
 }
@@ -3507,19 +3188,13 @@ async function refreshMaps(tables, manual) {
     const pf = t.fields.find((f) => f.id === t.primaryFieldId) || t.fields[0];
     if (!atts.length) { delete idx[c.base]; setMapIdx(idx); setJobBar(); return; }
     const v = (t.views || []).find((x) => norm(x.name) === 'gridview');
-    const q = [pf, ...atts].map((f) => 'fields%5B%5D=' + encodeURIComponent(f.name)).join('&');
     const items = [];
-    let off = '';
-    for (let pg = 0; pg < 5; pg++) {
-      const r = await airtableGet(`https://api.airtable.com/v0/${c.base}/${t.id}?pageSize=100&${q}${v ? '&view=' + v.id : ''}${off ? '&offset=' + encodeURIComponent(off) : ''}`, { headers: { Authorization: 'Bearer ' + c.token } });
-      if (!r.ok) return;
-      const d = await r.json();
-      for (const rec of d.records) for (const f of atts) for (const a of rec.fields[f.name] || []) {
-        if (!/pdf|image/i.test(a.type || '') && !/\.pdf$/i.test(a.filename || '')) continue;
-        mapUrls[a.id] = a.url;
-        items.push({ id: a.id, fn: a.filename || 'map.pdf', size: a.size || 0, type: a.type || 'application/pdf', col: f.name, rec: String(rec.fields[pf.name] || '').trim() });
-      }
-      if (!d.offset) break; off = d.offset;
+    const { records: mRecs, status: mErr } = await readAll(t.id, { fields: [pf, ...atts].map((f) => f.name), view: v ? v.id : '', maxPages: 5, base: c.base, token: c.token });
+    if (mErr) return;
+    for (const rec of mRecs) for (const f of atts) for (const a of rec.fields[f.name] || []) {
+      if (!/pdf|image/i.test(a.type || '') && !/\.pdf$/i.test(a.filename || '')) continue;
+      mapUrls[a.id] = a.url;
+      items.push({ id: a.id, fn: a.filename || 'map.pdf', size: a.size || 0, type: a.type || 'application/pdf', col: f.name, rec: String(rec.fields[pf.name] || '').trim() });
     }
     // PDFs are the maps; pictures only count when there is no PDF
     const pdfs = items.filter((m) => /pdf/i.test(m.type) || /\.pdf$/i.test(m.fn));
