@@ -722,6 +722,7 @@ async function tx(mode, fn) {
     const out = fn(s);
     t.oncomplete = () => res(out && out.result !== undefined ? out.result : undefined);
     t.onerror = () => rej(t.error);
+    t.onabort = () => rej(t.error || new Error('Saving was cancelled (the phone may be out of space)')); // a full phone cancels the save this way
   });
 }
 const putItem = (it) => tx('readwrite', (s) => s.put(it));
@@ -820,10 +821,31 @@ async function saveDetail(d) { try { await (await caches.open('beta-data')).put(
 async function loadDetail() { try { const r = await (await caches.open('beta-data')).match(DKEY); return r ? await r.json() : null; } catch { return null; } }
 // When a damper is picked, fill the form with whatever Airtable already has for it
 let lastFilled = {};
+// What Airtable had for the open damper, as the form shows it. Closing the page sends only the fields that differ from
+// this, so a value the office changed meanwhile is not overwritten, and a value the tech emptied is emptied in Airtable too.
+// null = not known (list not loaded): then every filled-in field is sent, as before.
+let airVals = null;
+const sameVal = (a, b) => (Array.isArray(a) || Array.isArray(b))
+  ? JSON.stringify([].concat(a || []).map(String).sort()) === JSON.stringify([].concat(b || []).map(String).sort())
+  : String(a == null ? '' : a).trim() === String(b == null ? '' : b).trim();
 async function applyFill(label) {
   const ef = FIELDS.find((f) => f.existing), o = getOpts()[ef.key], recId = o && o.recs && o.recs[label];
   const d = await loadDetail();
   const mine = (d && d.fill && recId && d.fill[recId]) || {};
+  airVals = null;
+  if (d && d.fill && recId) { // the same names the form uses (linked records: their names, not their record IDs)
+    airVals = {};
+    for (const f of FIELDS) {
+      if (f.existing || f.newOnly) continue;
+      let v = mine[f.key];
+      if (f.multi) {
+        v = v == null ? [] : Array.isArray(v) ? v : [v];
+        const po = getOpts()[f.key] || {};
+        if (po.type === 'multipleRecordLinks') { const inv = {}; for (const [lb, id] of Object.entries(po.recs || {})) inv[id] = lb; v = v.map((id) => inv[id]).filter(Boolean); } // the same ones the form can show
+      }
+      airVals[f.key] = v == null ? '' : v;
+    }
+  }
   // undo what the previous damper filled in (only if the tech did not change it since)
   for (const [k, v] of Object.entries(lastFilled)) { const f = FIELDS.find((x) => x.key === k), el = f && $(fid(k)); if (el && el.value === v) { const kk = keepVals(); el.value = f.keep ? (kk[k] || (f.type === 'date' ? today() : '')) : ''; if (f.multi) el.dataset.sel = f.keep ? (kk[k + '#sel'] || '') : ''; } }
   lastFilled = {};
@@ -838,7 +860,7 @@ async function applyFill(label) {
       el.dataset.sel = JSON.stringify(names); el.value = names.join(', ');
     } else {
       el.value = val;
-      if (el.value !== val) continue; // not one of the list's choices
+      if (el.value !== val) { if (airVals) airVals[f.key] = ''; continue; } // the box can't show it: never send it as "emptied"
     }
     lastFilled[f.key] = el.value;
   }
@@ -990,7 +1012,7 @@ async function savePhotos(c, t, viewQ, photoNames) {
 
 /* ---------- Pick-lists (read from Airtable, cached for offline) ---------- */
 const getOpts = () => { try { return JSON.parse(localStorage.getItem('opts') || '{}'); } catch { return {}; } };
-const APP_VERSION = '2026-11-18-c (test copy)';
+const APP_VERSION = '2026-11-21-a (test copy)';
 try { document.getElementById('verFoot').textContent = 'Damper Inspection · version ' + APP_VERSION; } catch {}
 let quietRetry = false;
 function report(msg, manual) {
@@ -3031,6 +3053,8 @@ async function commitForm(quiet) {
   const say = (m) => { if (!quiet) toast(m); };
   const fields = {}, vals = {}, k = {};
   let pickedId = '';
+  const air = !newMode && airVals; // existing damper: only what differs from Airtable is sent
+  const emptyOf = (o) => (/^multiple(Selects|Collaborators|RecordLinks)$/.test((o && o.type) || '') ? [] : null); // how Airtable is told "empty"
   for (const f of FIELDS) {
     if ((f.newOnly && !newMode) || (f.existing && newMode)) continue;
     if (f.multi) {
@@ -3038,6 +3062,10 @@ async function commitForm(quiet) {
       if (!picks.length && $(fid(f.key)).value.trim()) picks = $(fid(f.key)).value.split(/,\s*/).filter(Boolean); // shown but never tapped: send what is shown
       const o = getOpts()[f.key] || {};
       if (f.keep) { k[f.key] = $(fid(f.key)).value; k[f.key + '#sel'] = $(fid(f.key)).dataset.sel || ''; }
+      if (air && f.key in air) {
+        if (sameVal(picks, air[f.key])) continue; // unchanged
+        if (!picks.length) { fields[colOf(f.key)] = emptyOf(o); continue; } // emptied on the phone
+      }
       if (picks.length) {
         const who = (n) => { const pp = (o.people && o.people[n]) || {}; return pp.id ? { id: pp.id } : { email: pp.email || n }; };
         if (/Collaborator/.test(o.type || '')) fields[colOf(f.key)] = o.type === 'multipleCollaborators' ? picks.map(who) : who(picks[0]);
@@ -3051,6 +3079,10 @@ async function commitForm(quiet) {
     if (f.keep) k[f.key] = v;
     vals[f.key] = v;
     if (f.existing) { pickedId = v; continue; } // the full damper ID is built by Airtable: only ever read, never written
+    if (air && f.key in air) {
+      if (sameVal(v, air[f.key])) continue; // unchanged
+      if (v === '') { fields[colOf(f.key)] = emptyOf(f.type === 'select' && getOpts()[f.key]); continue; } // emptied on the phone
+    }
     if (v === '') continue;
     let val = f.type === 'number' ? Number(v) : v;
     const o = f.type === 'select' && getOpts()[f.key];

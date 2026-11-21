@@ -179,7 +179,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = '2026-11-18-c';
+const APP_VERSION = '2026-11-21-a';
 const $ = (id) => document.getElementById(id);
 $('verFoot').textContent = 'Markup v' + APP_VERSION;
 $('ver').textContent = 'Version ' + APP_VERSION + ' · works offline once opened · nothing is uploaded';
@@ -317,7 +317,9 @@ async function openFile(file, remember) {
     } else {
       doc.img = await loadImg(file);
     }
-    S.doc = doc;
+    if (S.doc && S.doc.pdf) { try { S.doc.pdf.destroy(); } catch (e) {} } // let go of the last file
+    S.doc = doc; S.detail = null; S.detailView = null;
+    for (const k in pageText) delete pageText[k]; // page search reads the new file's text, not the last one's
     S.store = lsGet('markup:' + doc.key) || {};
     S.nextId = S.store.nextId || ''; S.color = S.store.color || 'pink'; S.sizeMul = S.store.sizeMul || 1; S.style = S.store.style || 'line'; S.ink = S.store.ink || 'black';
     if (remember) idbSet('last', { blob: file, name, type: file.type });
@@ -426,7 +428,7 @@ $('pagesBtn').onclick = () => { persist(); showPages(); };
 async function openPage(n) {
   hint('Opening page…');
   cancelDetail();
-  S.pageNo = n; S.sel = null; S.undo = [];
+  S.pageNo = n; S.sel = null; S.undo = []; S.detail = null; S.detailView = null; // the sharp copy belongs to the last page
   $('pagesBtn').textContent = '☰ ' + n + ' / ' + S.doc.n;
   if (S.doc.kind === 'pdf') {
     const page = await S.doc.pdf.getPage(n);
