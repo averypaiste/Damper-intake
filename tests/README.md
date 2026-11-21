@@ -9,4 +9,6 @@ Small browser checks (Playwright). Each prints GREEN or RED. None of them touch 
    - `node tests/damper-save.js clear` : emptying a field on a damper page empties it in Airtable.
    - `node tests/damper-save.js stale` : closing a damper page sends only what was changed, so the office's newer edits are not overwritten.
    - `node tests/damper-save.js unpick` : taking one name off a pick-list sends the shorter list.
+   - `node tests/damper-save.js pass`, `paste`, `cell` : the ✓ Pass button, copy/paste and a table cell edit send the right value and show it on the phone straight away.
+   - `node tests/damper-save.js new` : a new damper is created with what was typed.
    - `node tests/save-cancelled.js` : when the phone cancels a save (out of space), the app shows an error instead of hanging.

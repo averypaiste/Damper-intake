@@ -1,4 +1,4 @@
-// Run: serve the repo (python3 -m http.server 8765), then node tests/damper-save.js clear|stale|unpick
+// Run: serve the repo (python3 -m http.server 8765), then node tests/damper-save.js clear|stale|unpick|pass|paste|cell|new
 // Damper page: what gets sent to Airtable when a tech edits one field / clears one field.
 // Fake Airtable (no real account is touched): every request to api.airtable.com is answered here.
 const { chromium } = require('playwright');
@@ -10,9 +10,10 @@ const server = { 'Damper IDs': 'FD-1-001', 'Room/location': 'Office 1', 'Inspect
 (async () => {
   const scenario = process.argv[2];
   const b = await chromium.launch(); const ctx = await b.newContext({ serviceWorkers: 'block' }); const p = await ctx.newPage();
-  const patches = [];
+  const patches = [], posts = [];
   await ctx.route(/airtable\.com/, async (route) => {
     const r = route.request(), u = new URL(r.url());
+    if (r.method() === 'POST' && u.hostname === 'api.airtable.com') { posts.push(JSON.parse(r.postData()).fields); return route.fulfill({ json: { id: 'recNEW0000000000001', fields: JSON.parse(r.postData()).fields } }); }
     if (r.method() === 'PATCH') { patches.push(JSON.parse(r.postData()).fields); return route.fulfill({ json: { id: REC, fields: server } }); }
     if (u.pathname === `/v0/meta/bases/${BASE}/tables`) return route.fulfill({ json: { tables: [{ id: TBL, name: 'Damper Survey', primaryFieldId: 'fld1', fields, views: [{ id: 'viw1', name: 'Tech View', type: 'grid', visibleFieldIds: fields.map((f) => f.id) }] }] } });
     if (u.pathname.startsWith('/v0/meta')) return route.fulfill({ json: { bases: [{ id: BASE, name: 'Test damper job', permissionLevel: 'create' }] } });
@@ -27,6 +28,27 @@ const server = { 'Damper IDs': 'FD-1-001', 'Room/location': 'Office 1', 'Inspect
   await p.waitForFunction(() => { try { return (getOpts()['Damper IDs'].choices || []).length > 0; } catch { return false; } }, null, { timeout: 15000 });
   const label = await p.evaluate(() => getOpts()['Damper IDs'].choices[0]);
   if (scenario === 'stale') server['Room/location'] = 'Office 2 (changed by the office)'; // office edits Airtable after the phone loaded the list
+  if (scenario === 'new') { // a new damper is created with what was typed
+    await p.evaluate(() => openNew(true)); await p.waitForTimeout(300);
+    await p.fill('#' + await p.evaluate(() => fid('Damper ID #')), '099');
+    await p.fill('#' + await p.evaluate(() => fid('Room/location')), 'New room');
+    await p.evaluate(() => document.getElementById('detail').close()); await p.waitForTimeout(2500);
+    console.log('POST bodies sent:', JSON.stringify(posts));
+    const sent = posts[0] || {};
+    console.log(sent['Damper ID #'] === '099' && sent['Room/location'] === 'New room' && !('Inspection Field Notes' in sent) ? 'GREEN' : 'RED'); await b.close(); return;
+  }
+  if (['pass', 'paste', 'cell'].includes(scenario)) { // the other screens that send a change
+    if (scenario === 'pass') { await p.evaluate(([l, r]) => openPass(l, r), [label, REC]); await p.click('#psSave'); }
+    if (scenario === 'paste') await p.evaluate(([l, r]) => { clip = { f: FIELDS.find((x) => x.key === 'Inspector(s)'), v: ['Sam T'] }; return pasteCell(l, r, document.createElement('div')); }, [label, REC]);
+    if (scenario === 'cell') { await p.evaluate(async ([l, r]) => openQuick(l, 'Room/location', await loadDetail(), { [l]: r }), [label, REC]); await p.fill('#qBody input', 'Office 9'); await p.click('#qSave'); }
+    await p.waitForTimeout(2500);
+    const sent = Object.assign({}, ...patches);
+    const shown = await p.evaluate(async (r) => (await loadDetail()).fill[r], REC);
+    console.log('PATCH bodies sent:', JSON.stringify(patches), '| phone copy now:', JSON.stringify(shown));
+    const want = { pass: { 'Operational Test': 'Pass' }, paste: { 'Inspector(s)': ['Sam T'] }, cell: { 'Room/location': 'Office 9' } }[scenario];
+    const ok = Object.entries(want).every(([k, v]) => JSON.stringify(sent[k]) === JSON.stringify(v) && JSON.stringify(shown[k]) === JSON.stringify(v));
+    console.log(ok ? 'GREEN' : 'RED'); await b.close(); return;
+  }
   await p.evaluate((l) => openDamper(l), label); await p.waitForTimeout(500);
   const sel = await p.evaluate(() => ({ notes: document.getElementById(fid('Inspection Field Notes')).value, room: document.getElementById(fid('Room/location')).value }));
   console.log('form opened with', JSON.stringify(sel));

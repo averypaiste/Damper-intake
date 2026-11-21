@@ -1726,38 +1726,20 @@ function openQuick(n, name, dd, recs) {
   } else { el = document.createElement('input'); el.type = f.type === 'date' ? 'date' : f.type === 'number' ? 'number' : 'text'; el.value = cur[f.key] || (f.type === 'date' ? today() : ''); body.append(el); }
   $('qCancel').onclick = () => { qPhotos.forEach((p) => URL.revokeObjectURL(p.url)); q.close(); };
   const doSave = async () => {
-    const fields = {}, photos = []; let fillVal = null, disp = '';
+    let changes = {}, photos = [];
     if (pf) {
-      qPhotos.forEach((p, i) => photos.push({ field: colOf(pf), name: `${pf.replace(/\W+/g, '_')}_${i + 1}.jpg`, blob: p.blob, done: false }));
+      photos = qPhotos.map((p) => ({ box: pf, blob: p.blob }));
       if (!photos.length) { q.close(); return; }
     } else if (f.multi) {
       let picks = []; try { picks = JSON.parse(el.dataset.sel || '[]'); } catch {}
       if (!picks.length && !el.dataset.changed) { q.close(); return; }
-      const who = (nm) => { const pp = (o.people && o.people[nm]) || {}; return pp.id ? { id: pp.id } : { email: pp.email || nm }; };
-      let val;
-      if (/Collaborator/.test(o.type || '')) { val = o.type === 'multipleCollaborators' ? picks.map(who) : who(picks[0]); fillVal = picks; }
-      else if (o.type === 'multipleRecordLinks') { val = picks.map((nm) => o.recs && o.recs[nm]).filter(Boolean); fillVal = val; }
-      else if (o.type === 'multipleSelects') { val = picks; fillVal = picks; }
-      else { val = picks[0]; fillVal = picks; }
-      if (!picks.length) { val = o.type === 'multipleCollaborators' || o.type === 'multipleRecordLinks' || o.type === 'multipleSelects' ? [] : null; fillVal = []; }
-      fields[colOf(f.key)] = val; disp = (Array.isArray(fillVal) ? fillVal : [fillVal]).join(', ');
+      changes = { [f.key]: picks };
     } else {
       const v = el.value.trim();
-      if (!v && (pickOnly || dateOnly)) { fields[colOf(f.key)] = o.type === 'multipleSelects' || o.type === 'multipleCollaborators' ? [] : null; fillVal = ''; disp = ''; } // Clear
-      else if (!v) { q.close(); return; }
-      else {
-      let val = f.type === 'number' ? Number(v) : v;
-      if (o.type === 'multipleSelects') val = [v];
-      else if (/Collaborator/.test(o.type || '')) { const pp = (o.people && o.people[v]) || {}; const w = pp.id ? { id: pp.id } : { email: pp.email || v }; val = o.type === 'multipleCollaborators' ? [w] : w; }
-      fields[colOf(f.key)] = val; fillVal = v; disp = v;
-      }
+      if (!v && !(pickOnly || dateOnly)) { q.close(); return; } // an empty text box is not sent; Clear in a list or calendar is
+      changes = { [f.key]: v };
     }
-    const item = { id: crypto.randomUUID(), createdAt: Date.now(), label: n, fields, photos, recordId: rid, preset: true, status: 'pending', error: '', base: cfg().base, tbl: tableRef(cfg()) };
-    try { await putItem(item); } catch { toast('Could not save: phone storage may be full. Sync or free up space.'); return; }
-    if (!pf) { // show the new value in the grid straight away
-      const d = await loadDetail();
-      if (d) { ((d.fill ||= {})[rid] ||= {})[f.key] = fillVal; const rc = ((d.recs ||= {})[rid] ||= {}); const k = (d.order || []).find((x) => norm(x) === norm(colOf(f.key))); if (k) rc[k] = disp; await saveDetail(d); }
-    }
+    try { await saveEdit(n, rid, changes, photos); } catch { toast('Could not save: phone storage may be full. Sync or free up space.'); return; }
     q.close(); toast('Saved ✓');
     await render(); sync();
   };
@@ -1826,27 +1808,7 @@ function showPasteBar() {
   bar.hidden = false; $('btnNew').hidden = true;
 }
 async function pasteCell(n, rid, cellEl) {
-  const f = clip.f, o = getOpts()[f.key] || {};
-  const who = (nm) => { const pp = (o.people && o.people[nm]) || {}; return pp.id ? { id: pp.id } : { email: pp.email || nm }; };
-  let val, fillVal, disp;
-  if (f.multi) {
-    const picks = clip.v;
-    if (/Collaborator/.test(o.type || '')) { val = o.type === 'multipleCollaborators' ? picks.map(who) : who(picks[0]); fillVal = picks; }
-    else if (o.type === 'multipleRecordLinks') { val = picks.map((nm) => o.recs && o.recs[nm]).filter(Boolean); fillVal = val; }
-    else if (o.type === 'multipleSelects') { val = picks; fillVal = picks; }
-    else { val = picks[0]; fillVal = picks; }
-    disp = picks.join(', ');
-  } else {
-    const v = String(clip.v);
-    val = f.type === 'number' ? Number(v) : v;
-    if (o.type === 'multipleSelects') val = [v];
-    else if (/Collaborator/.test(o.type || '')) { const w = who(v); val = o.type === 'multipleCollaborators' ? [w] : w; }
-    fillVal = v; disp = v;
-  }
-  const item = { id: crypto.randomUUID(), createdAt: Date.now(), label: n, fields: { [colOf(f.key)]: val }, photos: [], recordId: rid, preset: true, status: 'pending', error: '', base: cfg().base, tbl: tableRef(cfg()) };
-  try { await putItem(item); } catch { toast('Could not save: phone storage may be full.'); return; }
-  const d = await loadDetail();
-  if (d) { ((d.fill ||= {})[rid] ||= {})[f.key] = fillVal; const rc = ((d.recs ||= {})[rid] ||= {}); const k = (d.order || []).find((x) => norm(x) === norm(colOf(f.key))); if (k) rc[k] = disp; await saveDetail(d); }
+  try { await saveEdit(n, rid, { [clip.f.key]: clip.v }); } catch { toast('Could not save: phone storage may be full.'); return; }
   cellEl.style.background = '#d1f7c4';
   toast('Pasted ✓ ' + n.replace(/^.*· /, ''));
   clearTimeout(pasteTimer); pasteTimer = setTimeout(async () => { await render(); sync(); }, 700); // redraw once after a run of pastes
@@ -2149,25 +2111,21 @@ function openPass(n, rid) {
   $('psCancel').onclick = close;
   $('psMore').onclick = () => { close(); openDamper(n); };
   $('psSave').onclick = async () => {
-    const opF = 'Operational Test', oo = opts[opF] || {};
-    const pass = (oo.choices || []).find((c) => /^pass$/i.test(c)) || 'Pass';
-    const fields = { [colOf(opF)]: oo.type === 'multipleSelects' ? [pass] : pass };
+    const opF = 'Operational Test';
+    const pass = ((opts[opF] || {}).choices || []).find((c) => /^pass$/i.test(c)) || 'Pass';
+    const changes = { [opF]: pass };
     const day = kv['Inspection Date'] || today();
-    if (!hid.includes(norm('Inspection Date'))) fields[colOf('Inspection Date')] = day;
+    if (!hid.includes(norm('Inspection Date'))) changes['Inspection Date'] = day;
     let people = ins;
     if (insSel && !insSel.dataset.many) people = insSel.value ? [insSel.value] : [];
     if (insSel && insSel.dataset.many && insSel.value && !ins.includes(insSel.value)) people = [insSel.value];
     if (insSel && people.length) {
-      const who = (nm) => { const pp = (io.people && io.people[nm]) || {}; return pp.id ? { id: pp.id } : { email: pp.email || nm }; };
-      fields[colOf(insF)] = io.type === 'multipleCollaborators' ? people.map(who) : /Collaborator/.test(io.type || '') ? who(people[0]) : io.type === 'multipleSelects' ? people : people[0];
+      changes[insF] = people;
       const k = keeps(); if (k.__day !== today()) { for (const f of FIELDS) if (f.keep && f.type === 'date') delete k[f.key]; }
       k[insF] = people; k['Inspection Date'] = k['Inspection Date'] || day; k.__day = today(); localStorage.setItem('keeps', JSON.stringify(k));
     }
-    const photos = Object.entries(shots).map(([p, s]) => ({ field: colOf(p), name: `${p.replace(/\W+/g, '_')}_1.jpg`, blob: s.blob, done: false }));
-    const item = { id: crypto.randomUUID(), createdAt: Date.now(), label: n, fields, photos, recordId: rid, preset: true, status: 'pending', error: '', base: cfg().base, tbl: tableRef(cfg()) };
-    try { await putItem(item); } catch { toast('Could not save: phone storage may be full. Sync or free up space.'); return; }
-    const d = await loadDetail();
-    if (d) { const fr = ((d.fill ||= {})[rid] ||= {}); fr[opF] = pass; fr['Inspection Date'] = day; if (people.length) fr[insF] = people; await saveDetail(d); }
+    const photos = Object.entries(shots).map(([p, s]) => ({ box: p, blob: s.blob }));
+    try { await saveEdit(n, rid, changes, photos); } catch { toast('Could not save: phone storage may be full. Sync or free up space.'); return; }
     close(); toast('Pass saved ✓');
     await render(); sync();
   };
@@ -3046,53 +3004,80 @@ async function shrink(file) {
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('encode'))), 'image/jpeg', JPEG_Q));
 }
 
+/* ---------- Sending a change to Airtable: every screen goes through saveEdit ----------
+   saveEdit(label, recordId, changes, photos)
+     label    : the damper as the list shows it ("Bldg A · FD-1-011"), for the Messages list
+     recordId : the damper's Airtable row, or null for a new damper
+     changes  : { field: value } with values as the screens hold them: text, or a list of names for
+                pick-several fields (people, notes). '' or [] means "empty it in Airtable".
+     photos   : [{ box: 'Open Damper', blob }]
+   It turns the values into Airtable's format, puts the entry in the waiting-to-sync list (fails if the phone
+   is full), and updates the phone's copy so the table and checklist show the change straight away. */
+const MANY = /^multiple(Selects|Collaborators|RecordLinks)$/;
+function airtableValue(key, value) {
+  const f = FIELDS.find((x) => x.key === key) || {}, o = getOpts()[key] || {};
+  const list = [].concat(value == null ? [] : value).map((x) => String(x).trim()).filter(Boolean);
+  if (!list.length) return MANY.test(o.type || '') ? [] : null; // how Airtable is told "empty"
+  const who = (nm) => { const pp = (o.people && o.people[nm]) || {}; return pp.id ? { id: pp.id } : { email: pp.email || nm }; };
+  if (/Collaborator/.test(o.type || '')) return o.type === 'multipleCollaborators' ? list.map(who) : who(list[0]);
+  if (o.type === 'multipleRecordLinks') return list.map((nm) => o.recs && o.recs[nm]).filter(Boolean);
+  if (o.type === 'multipleSelects') return list;
+  return f.type === 'number' ? Number(list[0]) : list[0];
+}
+function phoneValue(key, value) { // what the phone's copy keeps: the same shape Airtable sends back (record IDs for linked notes)
+  const f = FIELDS.find((x) => x.key === key) || {}, o = getOpts()[key] || {};
+  const list = [].concat(value == null ? [] : value).map((x) => String(x).trim()).filter(Boolean);
+  if (!f.multi) return list[0] || '';
+  return o.type === 'multipleRecordLinks' ? list.map((nm) => o.recs && o.recs[nm]).filter(Boolean) : list;
+}
+async function saveEdit(label, recordId, changes, photos = []) {
+  const c = cfg(), fields = {}, n = {};
+  for (const [k, v] of Object.entries(changes)) fields[colOf(k)] = airtableValue(k, v);
+  const item = {
+    id: crypto.randomUUID(), createdAt: Date.now(), label, fields,
+    photos: photos.map((p) => ({ field: colOf(p.box), name: `${p.box.replace(/\W+/g, '_')}_${(n[p.box] = (n[p.box] || 0) + 1)}.jpg`, blob: p.blob, done: false })),
+    recordId: recordId || null, preset: !!recordId, status: 'pending', error: '', base: c.base, tbl: tableRef(c),
+  };
+  await putItem(item);
+  const d = recordId && Object.keys(changes).length && await loadDetail();
+  if (d) {
+    const fr = ((d.fill ||= {})[recordId] ||= {}), rc = ((d.recs ||= {})[recordId] ||= {});
+    for (const [k, v] of Object.entries(changes)) {
+      fr[k] = phoneValue(k, v);
+      const col = (d.order || []).find((x) => norm(x) === norm(colOf(k)));
+      if (col) rc[col] = [].concat(v == null ? [] : v).join(', ');
+    }
+    await saveDetail(d);
+  }
+  return item;
+}
+
 // Changes on a damper page are sent when you close the page or go to the next damper (no Save button).
 // quiet: no messages unless something stops it; the unfinished work stays as a draft.
 const isDirty = () => !!draftKey && (formState() !== baseline || PHOTOS.some((n) => (pendingPhotos[n] || []).length));
 async function commitForm(quiet) {
   const say = (m) => { if (!quiet) toast(m); };
-  const fields = {}, vals = {}, k = {};
+  const changes = {}, vals = {}, k = {};
   let pickedId = '';
   const air = !newMode && airVals; // existing damper: only what differs from Airtable is sent
-  const emptyOf = (o) => (/^multiple(Selects|Collaborators|RecordLinks)$/.test((o && o.type) || '') ? [] : null); // how Airtable is told "empty"
   for (const f of FIELDS) {
     if ((f.newOnly && !newMode) || (f.existing && newMode)) continue;
+    const el = $(fid(f.key));
+    let v;
     if (f.multi) {
-      let picks = []; try { picks = JSON.parse($(fid(f.key)).dataset.sel || '[]'); } catch {}
-      if (!picks.length && $(fid(f.key)).value.trim()) picks = $(fid(f.key)).value.split(/,\s*/).filter(Boolean); // shown but never tapped: send what is shown
-      const o = getOpts()[f.key] || {};
-      if (f.keep) { k[f.key] = $(fid(f.key)).value; k[f.key + '#sel'] = $(fid(f.key)).dataset.sel || ''; }
-      if (air && f.key in air) {
-        if (sameVal(picks, air[f.key])) continue; // unchanged
-        if (!picks.length) { fields[colOf(f.key)] = emptyOf(o); continue; } // emptied on the phone
-      }
-      if (picks.length) {
-        const who = (n) => { const pp = (o.people && o.people[n]) || {}; return pp.id ? { id: pp.id } : { email: pp.email || n }; };
-        if (/Collaborator/.test(o.type || '')) fields[colOf(f.key)] = o.type === 'multipleCollaborators' ? picks.map(who) : who(picks[0]);
-        else if (o.type === 'multipleRecordLinks') fields[colOf(f.key)] = picks.map((n) => o.recs && o.recs[n]).filter(Boolean);
-        else if (o.type === 'multipleSelects') fields[colOf(f.key)] = picks;
-        else fields[colOf(f.key)] = picks[0];
-      }
-      continue;
+      let picks = []; try { picks = JSON.parse(el.dataset.sel || '[]'); } catch {}
+      if (!picks.length && el.value.trim()) picks = el.value.split(/,\s*/).filter(Boolean); // shown but never tapped: send what is shown
+      if (f.keep) { k[f.key] = el.value; k[f.key + '#sel'] = el.dataset.sel || ''; }
+      v = picks;
+    } else {
+      v = el.value.trim();
+      if (f.keep) k[f.key] = v;
+      vals[f.key] = v;
+      if (f.existing) { pickedId = v; continue; } // the full damper ID is built by Airtable: only ever read, never written
     }
-    const v = $(fid(f.key)).value.trim();
-    if (f.keep) k[f.key] = v;
-    vals[f.key] = v;
-    if (f.existing) { pickedId = v; continue; } // the full damper ID is built by Airtable: only ever read, never written
-    if (air && f.key in air) {
-      if (sameVal(v, air[f.key])) continue; // unchanged
-      if (v === '') { fields[colOf(f.key)] = emptyOf(f.type === 'select' && getOpts()[f.key]); continue; } // emptied on the phone
-    }
-    if (v === '') continue;
-    let val = f.type === 'number' ? Number(v) : v;
-    const o = f.type === 'select' && getOpts()[f.key];
-    if (o && o.type === 'multipleSelects') val = [v];
-    else if (o && /Collaborator/.test(o.type)) {
-      const pp = (o.people && o.people[v]) || {};
-      const who = pp.id ? { id: pp.id } : { email: pp.email || v };
-      val = o.type === 'multipleCollaborators' ? [who] : who;
-    }
-    fields[colOf(f.key)] = val;
+    const empty = !v.length;
+    if (air && f.key in air) { if (!sameVal(v, air[f.key])) changes[f.key] = v; } // changed, or emptied on the phone
+    else if (!empty) changes[f.key] = v;
   }
   let presetId = null, label = '';
   const ef = FIELDS.find((f) => f.existing);
@@ -3115,18 +3100,10 @@ async function commitForm(quiet) {
     localStorage.setItem('keeps', JSON.stringify(next));
   }
   const photos = [], skip = noPics();
-  for (const name of PHOTOS) {
-    if (skip.includes(name)) continue; // this table has no column for it
-    (pendingPhotos[name] || []).forEach((p, i) =>
-      photos.push({ field: colOf(name), name: `${name.replace(/\W+/g, '_')}_${i + 1}.jpg`, blob: p.blob, done: false }));
-  }
-  if (!photos.length && !Object.keys(fields).length) { say('Add a photo or some notes first'); return false; }
-  const item = {
-    id: crypto.randomUUID(), createdAt: Date.now(), label, fields, photos,
-    recordId: presetId, preset: !!presetId, status: 'pending', error: '', base: cfg().base, tbl: tableRef(cfg()),
-  };
+  for (const name of PHOTOS) if (!skip.includes(name)) for (const p of pendingPhotos[name] || []) photos.push({ box: name, blob: p.blob }); // boxes this table has a column for
+  if (!photos.length && !Object.keys(changes).length) { say('Add a photo or some notes first'); return false; }
   const dk = draftKey;
-  try { await putItem(item); }
+  try { await saveEdit(label, presetId, changes, photos); }
   catch { toast('Could not save: phone storage may be full. It is kept as a draft. Sync or free up space.'); await saveDraft(); return false; }
   clearTimeout(draftTimer);
   if (dk) await deleteDraft(dk);
